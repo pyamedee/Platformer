@@ -4,7 +4,7 @@
 import pickle
 import sys
 import numpy as np
-from ordered_set import OrderedSet
+#from ordered_set import OrderedSet
 
 import tkinter as tk
 from PIL import Image, ImageTk

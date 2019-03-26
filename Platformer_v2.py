@@ -5,12 +5,68 @@ import pygame
 from pygame.locals import *
 import sqlite3
 import numpy as np
+from math import sin, cos
 
 import Scripts.sprites as sprites
 
 DEBUG = False
 
 pygame.init()
+
+
+class Book(type):
+
+    def __new__(mcs, name, bases=(object,)):
+        dict_ = dict(mcs._Page.__dict__).copy()
+        dict_['_pages'] = dict()
+        dict_['active_page'] = None
+        return type(name, bases, dict_)
+
+    class _Page:
+        _pages = dict()
+        active_page = None
+
+        def __init__(self, name, event_dict):
+            self.events = event_dict
+            self.name = name
+            type(self).add_page(self)
+
+        @classmethod
+        def add_page(cls, instance):
+            cls._pages[instance.name] = instance
+            return instance
+
+        @classmethod
+        def pop_page(cls, name):
+            return cls._pages.pop(name)
+
+        @classmethod
+        def switch_page(cls, new_page):
+            page_instance = cls._pages[new_page]
+            if isinstance(page_instance, cls):
+                page_instance.activate()
+                if cls.active_page is not None:
+                    cls.active_page.deactivate()
+                cls.active_page = page_instance
+            else:
+                raise TypeError('pages must be a page instance in order to be activated')
+
+        class _Getter:
+            def __init__(self, pages):
+                self._pages = pages
+
+            def __getitem__(self, item):
+                return self._pages[item]
+
+        @classmethod
+        def page_getter(cls):
+            return cls._Getter(cls._pages)
+
+        def activate(self):
+            raise NotImplementedError
+
+        def deactivate(self):
+            raise NotImplementedError
 
 
 class Model:
@@ -210,28 +266,28 @@ class Viewer(BaseViewer):
             bg_path = 'Images\\bg.png'
             super().__init__(self.name, event_dict, bg_path)
 
-            self.sys_font = pygame.font.SysFont('Helvetica', 80, bold=True)
+            self.font = pygame.font.Font('.\\Lucida.ttf', 60)
             self.fonts = dict()
             self.changes = set()
 
         def display_text(self):
 
             # Quit text
-            render = self.sys_font.render('Quit', True, (255, 255, 255))
-            rect = render.get_rect().move(70, 540)
+            render = self.font.render('Quit', True, (255, 255, 255))
+            rect = render.get_rect().move(70, 540).inflate(-4, -4)
 
-            render2 = self.sys_font.render('Quit', True, (180, 180, 180))
-            rect2 = render2.get_rect().move(70, 540)
+            render2 = self.font.render('Quit', True, (180, 180, 180))
+            rect2 = render2.get_rect().move(70, 540).inflate(-4, -4)
 
             self.fonts['quit'] = [(render, rect), (render2, rect2), 0]
             self.changes.add('quit')
 
             #  Play text
-            render = self.sys_font.render('Play', True, (255, 255, 255))
-            rect = render.get_rect().move(70, 440)
+            render = self.font.render('Play', True, (255, 255, 255))
+            rect = render.get_rect().move(70, 440).inflate(-4, -4)
 
-            render2 = self.sys_font.render('Play', True, (180, 180, 180))
-            rect2 = render2.get_rect().move(70, 440)
+            render2 = self.font.render('Play', True, (180, 180, 180))
+            rect2 = render2.get_rect().move(70, 440).inflate(-4, -4)
 
             self.fonts['play'] = [(render, rect), (render2, rect2), 0]
             self.changes.add('play')
@@ -400,7 +456,17 @@ class Controller:
             pass
 
     class InGame(BaseInGame):
-        pass
+        def __init__(self, model, viewer, name, level_id):
+            super().__init__(model, viewer, name)
+            self.level_id = int(level_id)
+            self.structure_getter = self.model.structure_getter(self.level_id)
+            self.level = self.model.get_level(self.level_id)
+
+    class Level1(InGame):
+        def __init__(self, model, viewer):
+            name = 'Level1'
+            level_id = 1
+            super().__init__(model, viewer, name, level_id)
 
 
 def main():
@@ -417,4 +483,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-    sys.exit()
