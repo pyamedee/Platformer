@@ -6,72 +6,97 @@ from pygame.locals import *
 import sqlite3
 import numpy as np
 from math import sin, cos
+import logging as lg
+from logging.handlers import RotatingFileHandler
+
 
 import Scripts.sprites as sprites
 
 DEBUG = False
 
+logger = lg.getLogger('main')
+logger.setLevel(lg.DEBUG)
+
+formatter = lg.Formatter('%(asctime)s | %(levelname)s | %(message)s')
+
+file_handler = RotatingFileHandler('platformer.log', 'a', 1000000, 1)
+
+file_handler.setLevel(lg.INFO)
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+
+stream_handler = lg.StreamHandler()
+
+stream_handler.setLevel(lg.DEBUG)
+stream_handler.setFormatter(formatter)
+logger.addHandler(stream_handler)
+
 pygame.init()
 
 
-class Book(type):
+class _Page:
 
-    def __new__(mcs, name, bases=(object,)):
-        dict_ = dict(mcs._Page.__dict__).copy()
-        dict_['_pages'] = dict()
-        dict_['active_page'] = None
-        return type(name, bases, dict_)
+    _pages = dict()
+    active_page = None
 
-    class _Page:
-        _pages = dict()
-        active_page = None
+    def __new__(cls, *args, **kwargs):
+        instance = object.__new__(cls)
+        cls._pages[cls.name] = instance
+        return instance
 
-        def __init__(self, name, event_dict):
-            self.events = event_dict
-            self.name = name
-            type(self).add_page(self)
+    def __init__(self, *args, **kwargs):
+        pass
 
-        @classmethod
-        def add_page(cls, instance):
-            cls._pages[instance.name] = instance
-            return instance
+    @classmethod
+    def add_page(cls, instance):
+        cls._pages[instance.name] = instance
+        return instance
 
-        @classmethod
-        def pop_page(cls, name):
-            return cls._pages.pop(name)
+    @classmethod
+    def pop_page(cls, name):
+        return cls._pages.pop(name)
 
-        @classmethod
-        def switch_page(cls, new_page):
-            page_instance = cls._pages[new_page]
-            if isinstance(page_instance, cls):
-                page_instance.activate()
-                if cls.active_page is not None:
-                    cls.active_page.deactivate()
-                cls.active_page = page_instance
-            else:
-                raise TypeError('pages must be a page instance in order to be activated')
+    @classmethod
+    def switch_page(cls, new_page):
+        page_instance = cls._pages[new_page]
+        if isinstance(page_instance, cls):
+            page_instance.activate()
+            if cls.active_page is not None:
+                cls.active_page.deactivate()
+            cls.active_page = page_instance
+        else:
+            raise TypeError('pages must be a page instance in order to be activated')
 
-        class _Getter:
-            def __init__(self, pages):
-                self._pages = pages
+    class _Getter:
+        def __init__(self, pages):
+            self._pages = pages
 
-            def __getitem__(self, item):
-                return self._pages[item]
+        def __getitem__(self, item):
+            return self._pages[item]
 
-        @classmethod
-        def page_getter(cls):
-            return cls._Getter(cls._pages)
+    @classmethod
+    def page_getter(cls):
+        return cls._Getter(cls._pages)
 
-        def activate(self):
-            raise NotImplementedError
+    def activate(self):
+        raise NotImplementedError
 
-        def deactivate(self):
-            raise NotImplementedError
+    def deactivate(self):
+        raise NotImplementedError
+
+
+dict1 = dict2 = dict(_Page.__dict__)
+dict1['_pages'] = dict()
+dict2['_pages'] = dict()
+BaseViewerPage = type('base viewer page', (object,), dict1)
+BaseControllerPage = type('base controller page', (object,), dict2)
+del dict1, dict2
 
 
 class Model:
 
     def __init__(self):
+        logger.debug('initialize Model')
         self.database_connection = sqlite3.connect('data.db')
         self.cursor = self.database_connection.cursor()
 
@@ -140,6 +165,7 @@ class Model:
 class BaseViewer:
 
     def __init__(self, framerate):
+        logger.debug('initialize BaseViewer')
         self.stop_mainloop = False
         self.events = dict()
         self.actions = set()
@@ -152,7 +178,7 @@ class BaseViewer:
         self.window = pygame.display.set_mode(window_size, *flags)
 
     def stop_loop(self):
-        print('Stopping loop...')
+        logger.info('Stopping loop...')
         self.stop_mainloop = True
 
     def loop(self):
@@ -164,7 +190,8 @@ class BaseViewer:
                     self.events[event.type](event)
 
                 elif event.type == QUIT:
-                    return
+                    logger.warning('The game has been force-quited.')
+                    return -1
             pygame.event.pump()
 
             for action in self.actions:
@@ -174,7 +201,8 @@ class BaseViewer:
 
             pygame.display.flip()
 
-        print('Done.')
+        logger.info('Done.')
+        return 0
 
     def main(self):
         raise NotImplementedError('Implement this method in subclasses of this class.')
@@ -182,66 +210,25 @@ class BaseViewer:
 
 class Viewer(BaseViewer):
     def __init__(self, framerate=30):
+        logger.debug('initialize Viewer')
         super(Viewer, self).__init__(framerate)
-        self.game = None
 
     def init_pages(self):
         self.StartingPage(self.events)
+        self.Level1(self.events)
 
-        self.Page.switch_page('StartingPage')
+        self.ViewerPage.switch_page('StartingPage')
 
     def main(self):
-        self.Page.active_page.update()
+        self.ViewerPage.active_page.update()
 
-    class Page:
-        _pages = dict()
-        active_page = None
-
-        def __init__(self, name, event_dict):
+    class ViewerPage(BaseViewerPage):
+        def __init__(self, event_dict):
             self.events = event_dict
-            self.name = name
-            type(self).add_page(self)
 
-        @classmethod
-        def add_page(cls, instance):
-            cls._pages[instance.name] = instance
-            return instance
-
-        @classmethod
-        def pop_page(cls, name):
-            return cls._pages.pop(name)
-
-        @classmethod
-        def switch_page(cls, new_page):
-            page_instance = cls._pages[new_page]
-            if isinstance(page_instance, cls):
-                page_instance.activate()
-                if cls.active_page is not None:
-                    cls.active_page.deactivate()
-                cls.active_page = page_instance
-            else:
-                raise TypeError('pages must be a page instance in order to be activated')
-
-        class _Getter:
-            def __init__(self, pages):
-                self._pages = pages
-
-            def __getitem__(self, item):
-                return self._pages[item]
-
-        @classmethod
-        def page_getter(cls):
-            return cls._Getter(cls._pages)
-
-        def activate(self):
-            raise NotImplementedError
-
-        def deactivate(self):
-            raise NotImplementedError
-
-    class MainMenu(Page):
-        def __init__(self, name, event_dict, bg_path):
-            super().__init__(name, event_dict)
+    class MainMenu(ViewerPage):
+        def __init__(self, event_dict, bg_path):
+            super().__init__(event_dict)
             self.window = pygame.display.get_surface()
             self.area = self.window.get_rect()
             self.displayed = False
@@ -260,11 +247,12 @@ class Viewer(BaseViewer):
             pass
 
     class StartingPage(MainMenu):
+        name = 'StartingPage'
 
         def __init__(self, event_dict):
             self.name = 'StartingPage'
             bg_path = 'Images\\bg.png'
-            super().__init__(self.name, event_dict, bg_path)
+            super().__init__(event_dict, bg_path)
 
             self.font = pygame.font.Font('.\\Lucida.ttf', 60)
             self.fonts = dict()
@@ -312,83 +300,76 @@ class Viewer(BaseViewer):
         def deactivate(self):
             self.events.pop(MOUSEMOTION)
 
+    class BaseInGame(ViewerPage):
+        pass
+
+    class InGame(BaseInGame):
+
+        def __init__(self, event_dict, level_id):
+            super().__init__(event_dict)
+            self.level_id = int(level_id)
+            self.sprites = pygame.sprite.Group()
+            self.structure_group = pygame.sprite.Group()
+            self.player = None
+
+        def load_structures(self, structures):
+
+            for structure in structures:
+                label = structure[4]
+                sprite = sprites.Structure(structures[1:3], 'bouh')
+                self.sprites.add(sprite)
+                self.structure_group.add(sprite)
+
+        def load_player(self, coords):
+
+            player = sprites.Player(coords, 'image')
+            self.sprites.add(player)
+            self.player = player
+
+    class Level1(InGame):
+        name = 'Level1'
+
+        def __init__(self, event_dict):
+            super().__init__(event_dict, 1)
+
 
 class Controller:
 
     def __init__(self, model, viewer):
+        logger.debug('initialize Controller')
         self.model = model
         self.viewer = viewer
 
     def init_pages(self):
         self.StartingPage(self.model, self.viewer)
+        self.Level1(self.model, self.viewer)
 
-        self.Page.switch_page('StartingPage')
+        self.ControllerPage.switch_page('StartingPage')
 
-    class Page:
-        _pages = dict()
-        active_page = None
-
-        def __init__(self, model, viewer, name):
-            self.name = name
-            self.model = model
+    class ControllerPage(BaseControllerPage):
+        def __init__(self, model, viewer):
             self.viewer = viewer
-            type(self).add_page(self)
+            self.model = model
 
-        @classmethod
-        def add_page(cls, instance):
-            cls._pages[instance.name] = instance
-            return instance
+    class MainMenu(ControllerPage):
 
-        @classmethod
-        def pop_page(cls, name):
-            return cls._pages.pop(name)
-
-        @classmethod
-        def switch_page(cls, new_page):
-            page_instance = cls._pages[new_page]
-            if isinstance(page_instance, cls):
-                page_instance.activate()
-                if cls.active_page is not None:
-                    cls.active_page.deactivate()
-                cls.active_page = page_instance
-            else:
-                raise TypeError('pages must be a page instance in order to be activated')
-
-        class _Getter:
-            def __init__(self, pages):
-                self._pages = pages
-
-            def __getitem__(self, item):
-                return self._pages[item]
-
-        @classmethod
-        def page_getter(cls):
-            return cls._Getter(cls._pages)
+        def __init__(self, model, viewer):
+            super().__init__(model, viewer)
 
         def activate(self):
-            raise NotImplementedError
-
-        def deactivate(self):
-            raise NotImplementedError
-
-    class MainMenu(Page):
-
-        def __init__(self, model, viewer, name):
-            super().__init__(model, viewer, name)
-
-        def activate(self):
-            if self.viewer.Page.active_page is None:
+            if self.viewer.ViewerPage.active_page is None:
                 self.viewer.init_pages()
 
         def deactivate(self):
             pass
 
     class StartingPage(MainMenu):
+        name = 'StartingPage'
 
         def __init__(self, model, viewer):
             self.name = 'StartingPage'
-            super().__init__(model, viewer, self.name)
-            self.getter = self.viewer.Page.page_getter()
+            super().__init__(model, viewer)
+            self.getter = self.viewer.ViewerPage.page_getter()
             self.v_starting_page = None  # viewer's Starting Page, attributed on activation
             self.event_handler = None
             self.action_handler = None
@@ -402,12 +383,12 @@ class Controller:
 
             self.v_starting_page.bind_events(self.event_handler)
 
-        def deactivation(self):
+        def deactivate(self):
             super().deactivate()
             del self.v_starting_page, self.action_handler, self.event_handler
 
         def play(self):
-            print('play')
+            pass
 
         class EventHandler:
             def __init__(self, v_starting_page, action_handler):
@@ -445,9 +426,9 @@ class Controller:
             def quit(self):
                 self.viewer.stop_loop()
 
-    class BaseInGame(Page):
-        def __init__(self, model, viewer, name):
-            super().__init__(model, viewer, name)
+    class BaseInGame(ControllerPage):
+        def __init__(self, model, viewer):
+            super().__init__(model, viewer)
 
         def activate(self):
             pass
@@ -456,20 +437,22 @@ class Controller:
             pass
 
     class InGame(BaseInGame):
-        def __init__(self, model, viewer, name, level_id):
-            super().__init__(model, viewer, name)
+        def __init__(self, model, viewer, level_id):
+            super().__init__(model, viewer)
             self.level_id = int(level_id)
             self.structure_getter = self.model.structure_getter(self.level_id)
             self.level = self.model.get_level(self.level_id)
 
     class Level1(InGame):
+        name = 'Level1'
+
         def __init__(self, model, viewer):
-            name = 'Level1'
             level_id = 1
-            super().__init__(model, viewer, name, level_id)
+            super().__init__(model, viewer, level_id)
 
 
 def main():
+    logger.info('Launching Platformer_v2.pyw')
     model = Model()
     viewer = Viewer(framerate=30)
     controller = Controller(model, viewer)
@@ -477,9 +460,8 @@ def main():
     flags = tuple() if DEBUG else (FULLSCREEN,)
     viewer.wdisplay((1280, 720), flags)
     controller.init_pages()
-    viewer.loop()
-    return model, viewer, controller
+    return viewer.loop()
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

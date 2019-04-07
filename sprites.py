@@ -4,10 +4,10 @@ from pygame.sprite import Sprite
 from numpy import sin, cos
 
 
-class Structure(Sprite):
-    
+class BaseSprite(Sprite):
+
     def __init__(self, coords, image):
-        super(Structure, self).__init__()
+        super().__init__()
 
         self.image = image
         self.rect = image.get_rect()
@@ -17,3 +17,9 @@ class Structure(Sprite):
         self.rect.move_ip(dx, dy)
 
 
+class Structure(BaseSprite):
+    pass
+
+
+class Player(BaseSprite):
+    pass
