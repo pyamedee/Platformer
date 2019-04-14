@@ -8,6 +8,7 @@ from Viewer import Viewer
 from logger import logger
 from pygame.constants import FULLSCREEN
 import argparse
+from data_parser import data
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--debug', action="store_true")
@@ -24,11 +25,11 @@ def main():
     else:
         logger.info('Launching Platformer')
     model = Model()
-    viewer = Viewer(framerate=30)
+    viewer = Viewer(model.get_text, framerate=30)
     controller = Controller(model, viewer)
 
     flags = tuple() if DEBUG else (FULLSCREEN,)
-    viewer.wdisplay((1280, 720), flags)
+    viewer.wdisplay((data['resolution-x'], data['resolution-y']), flags)
     controller.init_pages()
     return viewer.loop()
 

@@ -1,0 +1,5 @@
+language string fr
+font path "C:\Windows\Fonts\arial.ttf"
+
+resolution-x integer 1280
+resolution-y integer 720

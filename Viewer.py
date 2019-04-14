@@ -6,6 +6,7 @@ from pygame.locals import *
 
 from page_handler import PageHandler
 import sprites
+from data_parser import data
 pygame.init()
 
 
@@ -56,13 +57,14 @@ class BaseViewer:
 
 
 class Viewer(BaseViewer):
-    def __init__(self, framerate=30):
+    def __init__(self, text_getter, framerate=30):
         logger.debug('initialize Viewer')
         super(Viewer, self).__init__(framerate)
         self.page_handler = self.ViewerPageHandler()
+        self.text_getter = text_getter
 
     def init_pages(self):
-        self.page_handler.add_page('StartingPage', self.events)
+        self.page_handler.add_page('StartingPage', self.events, self.text_getter)
 
     def play(self):
         self.page_handler.current_page.unbind_events()
@@ -105,31 +107,35 @@ class Viewer(BaseViewer):
 
         class StartingPage(_MainMenu):
 
-            def __init__(self, event_dict):
+            def __init__(self, event_dict, text_getter):
                 bg_path = 'Images\\bg.png'
                 super().__init__(event_dict, bg_path)
 
-                self.font = pygame.font.Font('.\\Lucida.ttf', 60)
+                self.text_getter = text_getter
+                self.font = pygame.font.Font(data['font'], 60)
                 self.fonts = dict()
                 self.changes = set()
+                self.language = data['language']
 
             def display_text(self):
 
                 # Quit text
-                render = self.font.render('Quit', True, (255, 255, 255))
+                quit_text = tuple(self.text_getter((self.language,), 2))[0][-1]
+                render = self.font.render(quit_text, True, (255, 255, 255))
                 rect = render.get_rect().move(70, 540).inflate(-4, -4)
 
-                render2 = self.font.render('Quit', True, (180, 180, 180))
+                render2 = self.font.render(quit_text, True, (180, 180, 180))
                 rect2 = render2.get_rect().move(70, 540).inflate(-4, -4)
 
                 self.fonts['quit'] = [(render, rect), (render2, rect2), 0]
                 self.changes.add('quit')
 
                 #  Play text
-                render = self.font.render('Play', True, (255, 255, 255))
+                play_text = tuple(self.text_getter((self.language,), 1))[0][-1]
+                render = self.font.render(play_text, True, (255, 255, 255))
                 rect = render.get_rect().move(70, 440).inflate(-4, -4)
 
-                render2 = self.font.render('Play', True, (180, 180, 180))
+                render2 = self.font.render(play_text, True, (180, 180, 180))
                 rect2 = render2.get_rect().move(70, 440).inflate(-4, -4)
 
                 self.fonts['play'] = [(render, rect), (render2, rect2), 0]

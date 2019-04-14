@@ -11,6 +11,14 @@ class Model:
         self.database_connection = sqlite3.connect('data.db')
         self.cursor = self.database_connection.cursor()
 
+    def get_text(self, languages, text_id=-1):
+
+        code = '''SELECT id, ''' + ', '.join(languages) + ''' FROM Text'''
+        if text_id != -1:
+            code += ' WHERE id = {}'.format(text_id)
+
+        return self.cursor.execute(code)
+
     def get_level(self, level_id=-1):
 
         code = '''SELECT id, base_pos_x, base_pos_y, label
@@ -73,4 +81,8 @@ class Model:
             return iter(self._structures)
 
 
+if __name__ == '__main__':
+    model = Model()
+    text = model.get_text(('en',), 1)
+    print(list(text))
 
