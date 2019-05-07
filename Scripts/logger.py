@@ -8,7 +8,7 @@ def get_logger():
     _logger = lg.getLogger('main')
     _logger.setLevel(lg.DEBUG)
 
-    formatter = lg.Formatter('%(asctime)s | %(levelname)s | %(message)s')
+    formatter = lg.Formatter()
 
     file_handler = RotatingFileHandler('platformer.log', 'a', 1000000, 1)
 

@@ -1,14 +1,15 @@
 # -*- coding:Utf-8 -*-
 
 import sqlite3
-from logger import logger
+
+from Scripts.logger import logger
 
 
 class Model:
 
     def __init__(self):
         logger.debug('initialize Model')
-        self.database_connection = sqlite3.connect('data.db')
+        self.database_connection = sqlite3.connect('data\\data.db')
         self.cursor = self.database_connection.cursor()
 
     def get_text(self, languages, text_id=-1):
@@ -85,4 +86,3 @@ if __name__ == '__main__':
     model = Model()
     text = model.get_text(('en',), 1)
     print(list(text))
-

@@ -1,65 +1,20 @@
 # -*- coding:Utf-8 -*-
 
-from logger import logger
+from Scripts.logger import logger
 import pygame
 from pygame.locals import *
 
-from page_handler import PageHandler
-import sprites
-from data_parser import data
+from Classes.page_handler import PageHandler
+from Classes.base_viewer import BaseViewer
+import sprites.sprites as sprites
+from Scripts.configurations import sp_cfg, general_cfg
 pygame.init()
-
-
-class BaseViewer:
-
-    def __init__(self, framerate):
-        logger.debug('initialize BaseViewer')
-        self.stop_mainloop = False
-        self.events = dict()
-        self.actions = set()
-        self.FRAMERATE = framerate
-        self.clock = pygame.time.Clock()
-
-        self.window = None
-
-    def wdisplay(self, window_size, flags=tuple()):
-        self.window = pygame.display.set_mode(window_size, *flags)
-
-    def stop_loop(self):
-        logger.info('Stopping loop...')
-        self.stop_mainloop = True
-
-    def loop(self):
-        while not self.stop_mainloop:
-            self.clock.tick(self.FRAMERATE)
-            for event in pygame.event.get():
-
-                if event.type in self.events.keys():
-                    self.events[event.type](event)
-
-                elif event.type == QUIT:
-                    logger.warning('The game has been force-quited.')
-                    return -1
-            pygame.event.pump()
-
-            for action in self.actions:
-                action()
-
-            self.main()
-
-            pygame.display.flip()
-
-        logger.info('Done.')
-        return 0
-
-    def main(self):
-        raise NotImplementedError('Implement this method in subclasses of this class.')
 
 
 class Viewer(BaseViewer):
     def __init__(self, text_getter, framerate=30):
         logger.debug('initialize Viewer')
-        super(Viewer, self).__init__(framerate)
+        super(Viewer, self).__init__(framerate, logger)
         self.page_handler = self.ViewerPageHandler()
         self.text_getter = text_getter
 
@@ -112,10 +67,10 @@ class Viewer(BaseViewer):
                 super().__init__(event_dict, bg_path)
 
                 self.text_getter = text_getter
-                self.font = pygame.font.Font(data['font'], 60)
+                self.font = pygame.font.Font(sp_cfg['font'], sp_cfg.getint('font_size'))
                 self.fonts = dict()
                 self.changes = set()
-                self.language = data['language']
+                self.language = general_cfg['language']
 
             def display_text(self):
 
@@ -130,7 +85,7 @@ class Viewer(BaseViewer):
                 self.fonts['quit'] = [(render, rect), (render2, rect2), 0]
                 self.changes.add('quit')
 
-                #  Play text
+                # Play text
                 play_text = tuple(self.text_getter((self.language,), 1))[0][-1]
                 render = self.font.render(play_text, True, (255, 255, 255))
                 rect = render.get_rect().move(70, 440).inflate(-4, -4)
@@ -182,22 +137,59 @@ class Viewer(BaseViewer):
                 self.level_id = int(level_id)
                 self.sprites = pygame.sprite.Group()
                 self.structure_group = pygame.sprite.Group()
+                self.window = pygame.display.get_surface()
+                self.player_group = pygame.sprite.GroupSingle()
                 self.player = None
                 self.actions = action_set
+                self.bg = None
+
+            def display_bg(self, label):
+                image = pygame.image.load('Images\\level1_bg.png').convert()
+                self.window.blit(image, image.get_rect())
+                self.bg = image
 
             def load_structures(self, structures):
-
+                image = pygame.image.load('Images\\platform.png').convert_alpha()
                 for structure in structures:
                     label = structure[4]
-                    sprite = sprites.Structure(structure[1:3], 'bouh')
+                    print(structure)
+                    sprite = sprites.Structure(structure[2:4], image)
                     self.sprites.add(sprite)
                     self.structure_group.add(sprite)
 
             def load_player(self, coords):
 
-                player = sprites.Player(coords, 'image')
+                image = pygame.image.load('Images\\player.png').convert_alpha()
+                print(coords)
+                player = sprites.Player(coords, image)
                 self.sprites.add(player)
+                self.player_group.add(player)
                 self.player = player
+
+            def display(self):
+                self.sprites.draw(self.window)
+
+            def update(self):
+                self.player_group.clear(self.window, self.bg)
+                self.player_group.draw(self.window)
+                self.structure_group.draw(self.window)
+
+            def bind_events(self, event_handler):
+                self.events[KEYDOWN] = event_handler.keydown
+                self.events[KEYUP] = event_handler.keyup
+
+            def is_player_on_ground(self):
+                return pygame.sprite.spritecollideany(
+                    self.player.bottom_rect.move(self.player.vector / 10),
+                    self.structure_group,
+                    collided=self.collide)
+
+            def refresh_structures(self):
+                self.structure_group.draw(self.window)
+
+            @staticmethod
+            def collide(rect, sprite):
+                return rect.colliderect(sprite.rect)
 
             def activate(self):
                 pass

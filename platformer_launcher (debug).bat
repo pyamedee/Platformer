@@ -1,5 +1,3 @@
 @echo off
-call "%~dp0\venv\Scripts\activate.bat"
-set "PYTHONPATH=%~dp0;%PYTHONPATH%"
-"%~dp0\venv\Scripts\python.exe" "%~dp0\__main__.pyw" --debug
-call "%~dp0\venv\Scripts\deactivate.bat"
+call "%~dp0\commands\activate.cmd"
+"%base%\venv\Scripts\python.exe" "%base%\__main__.pyw" --debug

@@ -8,13 +8,11 @@ root = tk.Tk()
 sw = 1280
 sh = 800
 
-img = Image.open('landscape_painting_by_jonathandufresne-d5pwwbq.jpg')
+img = Image.open('base_level1_bg.jpg')
 
 
 img = ImageOps.fit(img, (sw, sh), Image.ANTIALIAS)
 
-img.save('bg.png')
+img.save('level1_bg.png')
 
 print(sw, sh)
-
-

@@ -3,3 +3,6 @@ __pycache__/
 .idea/
 .vscode/
 platformer.log
+Scripts/__pycache__/
+Classes/__pycache__/
+*.log
