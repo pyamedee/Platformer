@@ -19,6 +19,7 @@ DEBUG = args.debug
 if not DEBUG:
     DEBUG = general_cfg.getboolean('debug_mode')
 
+
 def main():
     if DEBUG:
         logger.info('Launching Platformer in debug mode')

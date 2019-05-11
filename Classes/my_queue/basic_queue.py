@@ -1,6 +1,7 @@
 # -*- coding:Utf-8 -*-
 
 from collections import deque
+from .exceptions import Full, Empty
 
 
 class BaseQueue:
@@ -74,14 +75,6 @@ class MaxSize(BaseQueue):
 
     def __repr__(self):
         return super().not_formatted_repr().format(', maxsize={}'.format(self.maxsize))
-
-
-class Empty(Exception):
-    pass
-
-
-class Full(Exception):
-    pass
 
 
 class DequeQueue(BaseQueue):

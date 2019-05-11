@@ -4,6 +4,9 @@ from Scripts.logger import logger
 import pygame
 from pygame.locals import *
 
+import pymunk.pygame_util
+import numpy as np
+
 from Classes.page_handler import PageHandler
 from Classes.base_viewer import BaseViewer
 import sprites.sprites as sprites
@@ -143,6 +146,8 @@ class Viewer(BaseViewer):
                 self.actions = action_set
                 self.bg = None
 
+                self.a = np.zeros(2, dtype=np.int32)  # decalage additionnel dans la conversion pymunk <-> pygame
+
             def display_bg(self, label):
                 image = pygame.image.load('Images\\level1_bg.png').convert()
                 self.window.blit(image, image.get_rect())
@@ -190,6 +195,12 @@ class Viewer(BaseViewer):
             @staticmethod
             def collide(rect, sprite):
                 return rect.colliderect(sprite.rect)
+
+            def to_pygame(self, p):
+                return np.array(pymunk.pygame_util.to_pygame(p, self.screen)) + self.a
+
+            def from_pygame(self, p):
+                return np.array(pymunk.pygame_util.to_pygame(p, self.screen)) - self.a
 
             def activate(self):
                 pass
