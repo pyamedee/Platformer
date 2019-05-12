@@ -145,6 +145,7 @@ class Viewer(BaseViewer):
                 self.player = None
                 self.actions = action_set
                 self.bg = None
+                self.area = self.window.get_rect()
 
                 self.a = np.zeros(2, dtype=np.int32)  # decalage additionnel dans la conversion pymunk <-> pygame
 
@@ -175,9 +176,11 @@ class Viewer(BaseViewer):
                 self.sprites.draw(self.window)
 
             def update(self):
-                self.player_group.clear(self.window, self.bg)
-                self.player_group.draw(self.window)
-                self.structure_group.draw(self.window)
+                for sprite in self.sprites.sprites():
+                    self.window.blit(sprite.image, sprite.rect)
+                # self.sprites.clear(self.window, self.bg)
+                # self.sprites.draw(self.window)
+                self.a[0] = -self.player.body.position.x + self.area.width / 2
 
             def bind_events(self, event_handler):
                 self.events[KEYDOWN] = event_handler.keydown
@@ -197,10 +200,10 @@ class Viewer(BaseViewer):
                 return rect.colliderect(sprite.rect)
 
             def to_pygame(self, p):
-                return np.array(pymunk.pygame_util.to_pygame(p, self.screen)) + self.a
+                return np.array(pymunk.pygame_util.to_pygame(p, self.window)) + self.a
 
             def from_pygame(self, p):
-                return np.array(pymunk.pygame_util.to_pygame(p, self.screen)) - self.a
+                return np.array(pymunk.pygame_util.to_pygame(p, self.window)) - self.a
 
             def activate(self):
                 pass

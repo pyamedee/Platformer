@@ -8,12 +8,6 @@ class BaseEventHandler:
 
 
 class BaseActionHandler:
-    def __call__(self, name, stop=False):
-        if not stop:
-            return getattr(self, 'do_' + name)()
-        getattr(self, 'stop_' + name)()
+    def __call__(self, action_type, action_name):
+        return getattr(self, action_type + '_' + action_name)()
 
-    def __getitem__(self, item, stop=False):
-        if not stop:
-            return getattr(self, 'do_' + name)
-        return getattr(self, 'stop_' + name)
