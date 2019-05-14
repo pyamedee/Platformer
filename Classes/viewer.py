@@ -176,11 +176,9 @@ class Viewer(BaseViewer):
                 self.sprites.draw(self.window)
 
             def update(self):
-                for sprite in self.sprites.sprites():
-                    self.window.blit(sprite.image, sprite.rect)
-                # self.sprites.clear(self.window, self.bg)
-                # self.sprites.draw(self.window)
                 self.a[0] = -self.player.body.position.x + self.area.width / 2
+                self.sprites.clear(self.window, self.bg)
+                self.sprites.draw(self.window)
 
             def bind_events(self, event_handler):
                 self.events[KEYDOWN] = event_handler.keydown

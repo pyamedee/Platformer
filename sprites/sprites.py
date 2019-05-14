@@ -16,7 +16,8 @@ class BaseSprite(Sprite):
     def __init__(self, coords, image):
         super().__init__()
         self.image = image
-        self.rect = image.get_rect().move(tuple(coords))
+        self.rect = image.get_rect()
+        self.rect.x, self.rect.y = coords
         self.coords = coords
 
 
@@ -28,6 +29,7 @@ class Structure(BaseSprite):
         super().__init__(coords, image)
 
         self.radius = self.rect.width
+        self.base_coords = tuple(self.coords)
 
         self.to_pygame = self.from_pygame = self.shape = self.a = self.b = None
 
@@ -37,15 +39,13 @@ class Structure(BaseSprite):
 
         self.shape = pymunk.Segment(type(self).body, a, b, thickness)
         self.shape.friction = 1
-        if iswall:
-            self.shape.iswall = True
+        self.shape.iswall = iswall
         self.a = self.to_pygame(a)
         self.b = self.to_pygame(b)
 
-    def update(self):
-        self.coords = self.to_pygame(self.body.position)
+    def update(self, a):
+        self.coords = self.base_coords + a
         self.rect.x, self.rect.y = self.coords
-        print(self.rect)
         # - Vec2d(
         # self.rect.width / 2, self.rect.height - self.radius)
 
@@ -101,7 +101,7 @@ class Player(BaseSprite):
         self.body.position = self.from_pygame(self.coords)
         
         self.shape = pymunk.Poly(self.body, self.points)
-        self.shape.friction = 0
+        self.shape.friction = 0.2
         self.VELOCITY = velocity  # 40000
 
     def add_to_space(self, space):

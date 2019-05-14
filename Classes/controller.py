@@ -9,8 +9,10 @@ from pygame.locals import *
 from pymunk.vec2d import Vec2d
 import pymunk.pygame_util
 
+from operator import truth
 import pygame.key
 
+from Classes.my_queue import DequeQueue as Queue
 from Classes.handlers import BaseActionHandler, BaseEventHandler
 from Classes.my_queue import DequeQueue as Queue
 from Classes.my_queue import Empty
@@ -19,6 +21,8 @@ from Classes.page_handler import PageHandler
 from Scripts.logger import logger
 
 from sprites.sprites import Structure
+
+LANDING = USEREVENT + 1
 
 
 class Controller:
@@ -144,7 +148,7 @@ class Controller:
                 self.viewer_page.bind_events(self.event_handler)
                 self.viewer_page.actions.add(self.update)
 
-                self.viewer_page.player.init_body(self.to_pygame, self.from_pygame, 1.3, 40000)
+                self.viewer_page.player.init_body(self.to_pygame, self.from_pygame, 1.3, 25000)
                 self.player.add_to_space(self.space)
 
                 sprites = self.viewer_page.structure_group.sprites()
@@ -163,16 +167,14 @@ class Controller:
                     self.controls = {
                         K_d: ('move_right', 'move'),
                         K_a: ('move_left', 'move'),
-                        K_SPACE: 'jump',
-                        K_ESCAPE: 'quit',
-                        K_w: 'tp',
-                        K_i: 'refresh_structures'
+                        K_SPACE: ('jump', None),
+                        K_ESCAPE: ('quit', None),
                     }
 
                 def keydown(self, evt):
                     try:
                         action_name = self.controls[evt.key]
-                    except IndexError:
+                    except KeyError:
                         return
 
                     self.action_handler('do', action_name[0])
@@ -180,97 +182,32 @@ class Controller:
                 def keyup(self, evt):
                     try:
                         action_name = self.controls[evt.key]
-                    except IndexError:
+                    except KeyError:
                         return
 
                     self.action_handler('stop', action_name[1])
-
-            #
-            # class ActionHandler(BaseActionHandler):
-            #     def __init__(self, viewer_page, quit_callback):
-            #         self.viewer_page = viewer_page
-            #         self.quit_callback = quit_callback
-            #
-            #         self.queue = OrderedSet()
-            #
-            #     def do_move_right(self):
-            #         if not self.viewer_page.player.isfalling:
-            #             self.viewer_page.player.vector += np.array((80, 0))
-            #         else:
-            #             self.queue.add(self.do_move_right)
-            #
-            #     def stop_move_right(self):
-            #         if not self.stop_moving():
-            #             self.queue.add(self.stop_move_right)
-            #
-            #     def stop_move_left(self):
-            #         if not self.stop_moving():
-            #             self.queue.add(self.stop_move_left)
-            #
-            #     def stop_moving(self):
-            #         if not self.viewer_page.player.isfalling:
-            #             self.viewer_page.player.vector[0] = 0
-            #             return True
-            #         return False
-            #
-            #     def do_move_left(self):
-            #         if not self.viewer_page.player.isfalling:
-            #             self.viewer_page.player.vector += np.array((-80, 0))
-            #         else:
-            #             self.queue.add(self.do_move_left)
-            #
-            #     def do_jump(self):
-            #         if not self.viewer_page.player.isfalling:
-            #             self.viewer_page.player.vector += np.array((0, -130))
-            #             self.viewer_page.player.isfalling = True
-            #
-            #     def do_quit(self):
-            #         self.quit_callback()
-            #
-            #     def do_refresh_structures(self):
-            #         self.viewer_page.refresh_structures()
-            #
-            #     def do_tp(self):
-            #         player = self.viewer_page.player
-            #
-            #         player.isfalling = True
-            #         player.vector[:] = 0, 2
-            #         player.place(4, 5)
-            #         print(self.queue)
-            #
-            # def update_state(self):
-            #     vector = self.viewer_page.player.vector
-            #     sprite = self.viewer_page.is_player_on_ground()
-            #     if sprite:
-            #         vector[1] = (sprite.rect.top - self.viewer_page.player.rect.bottom) * 10
-            #         if self.viewer_page.player.isfalling:
-            #             self.viewer_page.player.isfalling = False
-            #             self.action_queue.update(self.action_handler.queue)
-            #             self.action_handler.queue.clear()
-            #     else:
-            #         if not self.viewer_page.player.isfalling:
-            #             self.viewer_page.player.isfalling = True
-            #
-            # def update_vector(self):
-            #     if self.viewer_page.player.isfalling:
-            #         self.viewer_page.player.vector += (0, 4)
-            #     else:
-            #         self.viewer_page.player.vector[1] = 0
 
             class ActionHandler(BaseActionHandler):
 
                 def __init__(self, viewer_page, quit_callback):
                     self.viewer_page = viewer_page
                     self.player = viewer_page.player
-                    self.quit_callback = quit_callback
+                    self.do_quit = quit_callback
+                    self.action_queue = Queue()
 
                 def do_move_right(self):
-                    self.player.direction = 1
-                    self._move()
+                    if self.player.on_ground:
+                        self.player.direction = 1
+                        self._move()
+                    else:
+                        self.action_queue.put(self.do_move_right())
 
                 def do_move_left(self):
-                    self.player.direction = -1
-                    self._move()
+                    if self.player.on_ground:
+                        self.player.direction = -1
+                        self._move()
+                    else:
+                        self.action_queue.put(self.do_move_right())
 
                 def _move(self):
                     self.player.bf = 1
@@ -281,14 +218,27 @@ class Controller:
                     self.player.is_moving = False
                     self.player.is_stopping = True
 
+                def do_jump(self):
+                    if self.player.on_ground:
+                        self.player.body.apply_impulse_at_world_point(
+                            (0, 500),
+                            self.player.body.position + self.player.body.center_of_gravity)
+
             def from_pygame(self, d):
                 return self.viewer_page.from_pygame(d)
 
             def to_pygame(self, d):
                 return self.viewer_page.to_pygame(d)
 
+            def is_on_ground(self, arbiter):
+                shapes = arbiter.shapes
+                for shape in shapes:
+                    if isinstance(shape, pymunk.Segment) and not getattr(shape, 'iswall', False):
+                        self.player.on_ground = True
+                        return
+
             def move(self, is_mods):
-                modif = is_mods + 1
+                modif = truth(is_mods) + 1
                 div = math.sqrt(self.v.dot(self.v)) / 4 + 1
                 self.player.body.apply_force_at_local_point(
                     Vec2d(self.player.VELOCITY / div * self.player.direction / modif * self.spups, 0), (0, 0))
@@ -307,6 +257,12 @@ class Controller:
             def update(self):
                 self.mods = pygame.key.get_mods()
                 self.v = self.player.body.velocity
+
+                before = self.player.on_ground
+                self.player.on_ground = False
+                self.player.body.each_arbiter(self.is_on_ground)
+                if not before and self.player.on_ground:
+                    pygame.event.post(LANDING)
 
                 if self.player.is_moving:
                     self.move(self.mods & KMOD_LCTRL)
@@ -327,5 +283,5 @@ class Controller:
                     self.space.step(self.dt)
 
                 self.viewer_page.player_group.update()
-                self.viewer_page.structure_group.update()
-                self.space.debug_draw(self.draw_configuration)
+                self.viewer_page.structure_group.update(self.viewer_page.a)
+                #self.space.debug_draw(self.draw_configuration)
