@@ -3,11 +3,13 @@
 import argparse
 import sys
 
+from pyglet import app
 from pygame.constants import FULLSCREEN
 
 from Classes.controller import Controller
 from Classes.model import Model
 from Classes.viewer import Viewer
+from Classes.exception_wrapper import ExceptionWrapper
 from Scripts.configurations import general_cfg
 from Scripts.logger import logger
 
@@ -26,16 +28,19 @@ def main():
     else:
         logger.info('Launching Platformer')
     model = Model()
-    viewer = Viewer(model.get_text, framerate=60)
+    viewer = Viewer(model, framerate=60,
+                    width=general_cfg.getint('resolution_x'),
+                    height=general_cfg.getint('resolution_y'))
     controller = Controller(model, viewer)
 
     flags = tuple() if DEBUG else (FULLSCREEN,)
-    viewer.wdisplay((general_cfg.getint('resolution_x'),
-                    general_cfg.getint('resolution_y')),
-                    flags)
+    # viewer.wdisplay((general_cfg.getint('resolution_x'),
+    #                 general_cfg.getint('resolution_y')),
+    #                 flags)
     controller.init_pages()
-    return viewer.loop()
+    return app.run()
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    with ExceptionWrapper(logger):
+        sys.exit(main())

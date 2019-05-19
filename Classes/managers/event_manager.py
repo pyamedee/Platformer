@@ -15,10 +15,3 @@ class BaseEventManager:
                 if func_name.startswith(self.prefix):
                     self.handlers['on' + func_name[len(self.prefix):]] = getattr(self, func_name)
         return self.handlers
-
-
-class BaseActionManager:
-    def __call__(self, action_type, action_name):
-        if action_name:
-            return getattr(self, action_type + '_' + action_name)()
-

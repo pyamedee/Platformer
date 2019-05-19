@@ -1,12 +1,34 @@
 # -*- coding:Utf-8 -*-
 
-import pygame
-from pygame.constants import MOUSEBUTTONDOWN, QUIT
-
-pygame.init()
+import pyglet
 
 
-class BaseViewer:
+class BaseViewer(pyglet.window.Window):
+
+    def __init__(self, fps, logger, *args, **kwargs):
+        super(BaseViewer, self).__init__(*args, **kwargs)
+
+        self.logger = logger
+        self.fps = fps
+        self.dt = 1. / fps
+
+        pyglet.clock.schedule_interval(self.update, self.dt)
+
+    def bind(self, event_manager):
+        for name, func in event_manager.get_handlers().items():
+            self.set_handler(name, func)
+
+    def unbind(self, event_manager):
+        if not isinstance(event_manager, EventManager):
+            raise ValueError('event_manager is not an instance of EventManager but of {}'.format(type(event_manager)))
+        for name, func in event_manager.get_handlers().items():
+            self.remove_handler(name, func)
+
+    def update(self, *args, **kwargs):
+        raise NotImplementedError
+
+
+class BaseViewer0:
 
     def __init__(self, framerate, logger):
         self.logger = logger

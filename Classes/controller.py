@@ -13,16 +13,11 @@ from operator import truth
 import pygame.key
 
 from Classes.my_queue import DequeQueue as Queue
-from Classes.handlers import BaseActionHandler, BaseEventHandler
-from Classes.my_queue import DequeQueue as Queue
 from Classes.my_queue import Empty
-from Classes.ordered_set import OrderedSet
-from Classes.page_handler import PageHandler
+from Classes.managers import BasePageManager, BaseEventManager, BaseActionManager
 from Scripts.logger import logger
 
 from sprites.sprites import Structure
-
-LANDING = USEREVENT + 1
 
 
 class Controller:
@@ -31,18 +26,18 @@ class Controller:
         logger.debug('initialize Controller')
         self.model = model
         self.viewer = viewer
-        self.page_handler = self.ControllerPageHandler()
+        self.page_manager = self.PageManager()
 
     def _play(self):  # callback pour StartingPage
         self.viewer.play()
-        self.page_handler.switch_page('InGame', self.model, self.viewer, 1)
+        self.page_manager.switch_page('InGame', self.model, self.viewer, 1)
 
     def init_pages(self):
-        if self.viewer.page_handler.current_page is None:
+        if self.viewer.page_manager.current_page is None:
             self.viewer.init_pages()
-        self.page_handler.add_page('StartingPage', self.model, self.viewer, self._play)
+        self.page_manager.switch_page('StartingPage', self.model, self.viewer, self._play)
 
-    class ControllerPageHandler(PageHandler):
+    class PageManager(BasePageManager):
 
         class _ControllerPage:
             def __init__(self, model, viewer):
@@ -59,38 +54,51 @@ class Controller:
 
             def __init__(self, model, viewer, play_callback):
                 super().__init__(model, viewer)
-                self.event_handler = None
-                self.action_handler = None
+                self.event_manager = None
+                self.action_manager = None
                 self.play = play_callback
 
             def activate(self):
-                self.action_handler = self.ActionHandler(self.viewer, self.play)
-                self.event_handler = self.EventHandler(self.viewer.page_handler.current_page, self.action_handler)
+                self.action_manager = self.ActionManager(self.viewer, self.play)
+                self.event_manager = self.EventManager(self.viewer.page_manager.current_page, self.action_manager)
 
-                self.viewer.page_handler.current_page.bind_events(self.event_handler)
+                self.viewer.page_manager.current_page.bind(self.event_manager)
 
             def deactivate(self):
-                pass
+                self.viewer.page_manager.current_page.unbind(self.event_manager)
 
-            class EventHandler(BaseEventHandler):
-                def mouse_motion(self, evt):
-                    pos = evt.pos
-                    for font_name in self.viewer_page.fonts.keys():
+            class EventManager(BaseEventManager):
 
-                        if self.viewer_page.is_font_colliding(font_name, pos):
-                            self.viewer_page.activate_font(font_name)
+                def __init__(self, viewer_page, action_manager):
+                    super().__init__(action_manager)
+                    self.viewer_page = viewer_page
+                    self.handlers = {
+                        'on_mouse_motion': self.mouse_motion,
+                        'on_mouse_press': self.mouse_button_down
+                    }
+
+                def get_handlers(self):
+                    return self.handlers
+
+                # TODO: changer ça (pas bien)
+                def mouse_motion(self, x, y, *_, **__):
+                    pos = x, y
+                    for label in self.viewer_page.labels.keys():
+
+                        if self.viewer_page.is_label_colliding(label, pos):
+                            self.viewer_page.activate_label(label)
                         else:
-                            self.viewer_page.deactivate_font(font_name)
+                            self.viewer_page.deactivate_label(label)
 
-                def mouse_button_down(self, evt):
-                    pos = evt.pos
-                    for font_name in self.viewer_page.fonts.keys():
-                        if self.viewer_page.is_font_colliding(font_name, pos):
-                            self.action_handler('do', font_name)
+                def mouse_button_down(self, x, y, *_, **__):
+                    pos = x, y
+                    for label in self.viewer_page.labels.keys():
+                        if self.viewer_page.is_label_colliding(label, pos):
+                            self.action_handler('do', label)
 
-            class ActionHandler(BaseActionHandler):
+            class ActionManager(BaseActionManager):
                 def __init__(self, viewer, play_callback):
-                    self.do_quit = viewer.stop_loop
+                    self.do_quit = viewer.close
                     self.do_play = play_callback
 
         class InGame(_ControllerPage):
@@ -130,7 +138,7 @@ class Controller:
 
             def activate(self):
                 logger.debug('play button was pressed')
-                self.viewer_page = self.viewer.page_handler.current_page
+                self.viewer_page = self.viewer.page_manager.current_page
                 self.draw_configuration = pymunk.pygame_util.DrawOptions(self.viewer_page.window)
                 self.viewer_page.display_bg(self.level[3])
 
@@ -155,13 +163,15 @@ class Controller:
                 for structure in sprites:
                     structure.init_body(self.to_pygame, self.from_pygame,
                                         self.from_pygame((structure.rect.right, structure.rect.top)),
-                                        self.from_pygame((structure.rect.left, structure.rect.top)))
+                                        self.from_pygame((structure.rect.left, structure.rect.top)),
+                                        self.from_pygame((structure.rect.right, structure.rect.bottom)),
+                                        self.from_pygame((structure.rect.left, structure.rect.bottom)))
                 self.space.add(Structure.body, [s.shape for s in sprites])
 
             def deactivate(self):
                 pass
 
-            class EventHandler(BaseEventHandler):
+            class EventHandler(BaseEventManager):
                 def __init__(self, viewer_page, action_handler):
                     super().__init__(viewer_page, action_handler)
                     self.controls = {
@@ -187,27 +197,39 @@ class Controller:
 
                     self.action_handler('stop', action_name[1])
 
-            class ActionHandler(BaseActionHandler):
+                def land(self, _):
+                    self.action_handler.clear_flying_queue()
+
+                def stopped(self, _):
+                    self.action_handler.clear_stopping_queue()
+
+            class ActionHandler(BaseActionManager):
 
                 def __init__(self, viewer_page, quit_callback):
                     self.viewer_page = viewer_page
                     self.player = viewer_page.player
                     self.do_quit = quit_callback
+                    self.flying_queue = Queue()
                     self.action_queue = Queue()
+                    self.stopping_queue = Queue()
 
                 def do_move_right(self):
                     if self.player.on_ground:
+                        if self.player.is_stopping:
+                            return self.stopping_queue.put(self.do_move_right)
                         self.player.direction = 1
                         self._move()
                     else:
-                        self.action_queue.put(self.do_move_right())
+                        self.flying_queue.put(self.do_move_right)
 
                 def do_move_left(self):
                     if self.player.on_ground:
+                        if self.player.is_stopping:
+                            return self.stopping_queue.put(self.do_move_left)
                         self.player.direction = -1
                         self._move()
                     else:
-                        self.action_queue.put(self.do_move_right())
+                        self.flying_queue.put(self.do_move_left)
 
                 def _move(self):
                     self.player.bf = 1
@@ -215,14 +237,29 @@ class Controller:
                     self.player.is_moving = True
 
                 def stop_move(self):
-                    self.player.is_moving = False
-                    self.player.is_stopping = True
+                    if self.player.on_ground:
+                        if self.player.is_stopping:
+                            self.stopping_queue.put(self.stop_move)
+                        self.player.is_moving = False
+                        self.player.is_stopping = True
+                    else:
+                        self.flying_queue.put(self.stop_move)
 
                 def do_jump(self):
                     if self.player.on_ground:
                         self.player.body.apply_impulse_at_world_point(
                             (0, 500),
                             self.player.body.position + self.player.body.center_of_gravity)
+
+                def clear_flying_queue(self):
+                    self.action_queue.update(self.flying_queue.elements())
+
+                def clear_stopping_queue(self):
+                    self.action_queue.update(self.stopping_queue.elements())
+
+                def execute_action_queue(self):
+                    for action in self.action_queue.elements():
+                        action()
 
             def from_pygame(self, d):
                 return self.viewer_page.from_pygame(d)
@@ -233,7 +270,7 @@ class Controller:
             def is_on_ground(self, arbiter):
                 shapes = arbiter.shapes
                 for shape in shapes:
-                    if isinstance(shape, pymunk.Segment) and not getattr(shape, 'iswall', False):
+                    if getattr(shape, 'is_structure', False) and not getattr(shape, 'iswall', False):
                         self.player.on_ground = True
                         return
 
@@ -247,6 +284,7 @@ class Controller:
                 if self.player.bf > 30:
                     self.player.is_stumbling = True
                 if round(self.v.x) * self.player.direction <= 0:
+                    pygame.event.post(pygame.event.Event(self.model.get_event('STOPPED')[0]))
                     self.player.stopped = True
                     self.player.is_stopping = False
                 else:
@@ -258,11 +296,13 @@ class Controller:
                 self.mods = pygame.key.get_mods()
                 self.v = self.player.body.velocity
 
+                self.action_handler.execute_action_queue()
+
                 before = self.player.on_ground
                 self.player.on_ground = False
                 self.player.body.each_arbiter(self.is_on_ground)
                 if not before and self.player.on_ground:
-                    pygame.event.post(LANDING)
+                    pygame.event.post(pygame.event.Event(self.model.get_event('LANDING')[0]))
 
                 if self.player.is_moving:
                     self.move(self.mods & KMOD_LCTRL)
@@ -282,6 +322,6 @@ class Controller:
                 for _ in range(self.spups):
                     self.space.step(self.dt)
 
-                self.viewer_page.player_group.update()
-                self.viewer_page.structure_group.update(self.viewer_page.a)
+                # self.viewer_page.player_group.update()
+                # self.viewer_page.structure_group.update(self.viewer_page.a)
                 #self.space.debug_draw(self.draw_configuration)

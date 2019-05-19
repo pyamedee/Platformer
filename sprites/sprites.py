@@ -33,13 +33,14 @@ class Structure(BaseSprite):
 
         self.to_pygame = self.from_pygame = self.shape = self.a = self.b = None
 
-    def init_body(self, to_pygame_callback, from_pygame_callback, a, b, thickness=5, iswall=False):
+    def init_body(self, to_pygame_callback, from_pygame_callback, a, b, c, d, iswall=False):
         self.from_pygame = from_pygame_callback
         self.to_pygame = to_pygame_callback
 
-        self.shape = pymunk.Segment(type(self).body, a, b, thickness)
+        self.shape = pymunk.Poly(type(self).body, (a, b, c, d))
         self.shape.friction = 1
         self.shape.iswall = iswall
+        self.shape.is_structure = True
         self.a = self.to_pygame(a)
         self.b = self.to_pygame(b)
 

@@ -14,6 +14,7 @@
       <option name="myEncodingFormatIndex" value="1" />
       <option name="myAllPythons" value="true" />
     </inspection_tool>
+    <inspection_tool class="PyMethodOverridingInspection" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="PySuperArgumentsInspection" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="PyUnresolvedReferencesInspection" enabled="false" level="WARNING" enabled_by_default="false" />
   </profile>

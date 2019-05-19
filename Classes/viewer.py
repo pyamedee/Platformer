@@ -1,142 +1,155 @@
 # -*- coding:Utf-8 -*-
 
 from Scripts.logger import logger
-import pygame
-from pygame.locals import *
+import pyglet
 
 import pymunk.pygame_util
 import numpy as np
 
-from Classes.page_handler import PageHandler
+from Classes.managers import BasePageManager
 from Classes.base_viewer import BaseViewer
 import sprites.sprites as sprites
 from Scripts.configurations import sp_cfg, general_cfg
-pygame.init()
 
 
 class Viewer(BaseViewer):
-    def __init__(self, text_getter, framerate=30):
+    def __init__(self, model, framerate=30, *args, **kwargs):
         logger.debug('initialize Viewer')
-        super(Viewer, self).__init__(framerate, logger)
-        self.page_handler = self.ViewerPageHandler()
-        self.text_getter = text_getter
+        super(Viewer, self).__init__(framerate, logger, *args, **kwargs)
+        self.page_manager = self.PageManager()
+        self.model = model
 
     def init_pages(self):
-        self.page_handler.add_page('StartingPage', self.events, self.text_getter)
+        self.page_manager.switch_page('StartingPage', self.bind, self.unbind, self.model.get_text)
 
     def play(self):
-        self.page_handler.current_page.unbind_events()
-        self.page_handler.switch_page('InGame', self.events, self.actions, 1)
+        self.page_manager.switch_page('InGame', self.model.get_event, self.events, self.actions, 1)
 
-    def main(self):
-        self.page_handler.current_page.update()
+    def on_draw(self):
+        self.page_manager.current_page.draw()
 
-    class ViewerPageHandler(PageHandler):
+    def update(self, _):
+        self.page_manager.current_page.update()
+
+    class PageManager(BasePageManager):
 
         class _ViewerPage:
-            def __init__(self, event_dict):
-                self.events = event_dict
+            def __init__(self, event_binding_callback, event_unbinding_callback):
+                self.bind = event_binding_callback
+                self.unbind = event_unbinding_callback
 
             def activate(self):
                 raise NotImplementedError
 
             def deactivate(self):
+                raise NotImplementedError
+
+            def draw(self):
+                raise NotImplementedError
+
+            def update(self):
                 raise NotImplementedError
 
         class _MainMenu(_ViewerPage):
-            def __init__(self, event_dict, bg_path):
-                super().__init__(event_dict)
-                self.window = pygame.display.get_surface()
-                self.area = self.window.get_rect()
-                self.displayed = False
-                self.bg = pygame.image.load(bg_path).convert()
-                self.rect = self.bg.get_rect()
+            def __init__(self, event_binding_callback, event_unbinding_callback, bg_path):
+                super().__init__(event_binding_callback, event_unbinding_callback)
+                self.bg = pyglet.image.load(bg_path)
 
-            def activate(self):
-                if not self.displayed:
-                    self.display_bg(self.area)
-                    self.displayed = True
-
-            def display_bg(self, area):
-                self.window.blit(self.bg, self.rect, area)
-
-            def deactivate(self):
-                pass
+            def draw(self):
+                self.bg.blit(0, 0)
 
         class StartingPage(_MainMenu):
 
-            def __init__(self, event_dict, text_getter):
-                bg_path = 'Images\\bg.png'
-                super().__init__(event_dict, bg_path)
+            def __init__(self, event_binding_callback, event_unbinding_callback, text_getter):
+                bg_path = 'Images/bg.png'
+                super().__init__(event_binding_callback, event_unbinding_callback, bg_path)
 
                 self.text_getter = text_getter
-                self.font = pygame.font.Font(sp_cfg['font'], sp_cfg.getint('font_size'))
-                self.fonts = dict()
+                #self.font = pygame.font.Font(sp_cfg['font'], sp_cfg.getint('font_size'))
+                self.labels = dict()
+                self.label_batch = pyglet.graphics.Batch()
                 self.changes = set()
+
                 self.language = general_cfg['language']
 
-            def display_text(self):
+            def init_text(self):
+                quit_txt = tuple(self.text_getter((self.language,), 2))[0][-1]
+                self.labels['quit'] = [pyglet.text.Label(quit_txt,
+                                                         font_name='Lucida', batch=self.label_batch,
+                                                         font_size=36, x=70, y=100, color=(255, 255, 255, 255)),
+                                       True]
 
-                # Quit text
-                quit_text = tuple(self.text_getter((self.language,), 2))[0][-1]
-                render = self.font.render(quit_text, True, (255, 255, 255))
-                rect = render.get_rect().move(70, 540).inflate(-4, -4)
+                play_txt = tuple(self.text_getter((self.language,), 1))[0][-1]
+                self.labels['play'] = [pyglet.text.Label(play_txt,
+                                                         font_name='Lucida', batch=self.label_batch,
+                                                         font_size=36, x=70, y=200, color=(255, 255, 255, 255)),
+                                       True]
 
-                render2 = self.font.render(quit_text, True, (180, 180, 180))
-                rect2 = render2.get_rect().move(70, 540).inflate(-4, -4)
+            def draw(self):
+                super().draw()
+                self.label_batch.draw()
 
-                self.fonts['quit'] = [(render, rect), (render2, rect2), 0]
-                self.changes.add('quit')
+            # def display_text(self):
+            #
+            #     # Quit text
+            #     quit_text = tuple(self.text_getter((self.language,), 2))[0][-1]
+            #     render = self.font.render(quit_text, True, (255, 255, 255))
+            #     rect = render.get_rect().move(70, 540).inflate(-4, -4)
+            #
+            #     render2 = self.font.render(quit_text, True, (180, 180, 180))
+            #     rect2 = render2.get_rect().move(70, 540).inflate(-4, -4)
+            #
+            #     self.fonts['quit'] = [(render, rect), (render2, rect2), 0]
+            #     self.changes.add('quit')
+            #
+            #     # Play text
+            #     play_text = tuple(self.text_getter((self.language,), 1))[0][-1]
+            #     render = self.font.render(play_text, True, (255, 255, 255))
+            #     rect = render.get_rect().move(70, 440).inflate(-4, -4)
+            #
+            #     render2 = self.font.render(play_text, True, (180, 180, 180))
+            #     rect2 = render2.get_rect().move(70, 440).inflate(-4, -4)
+            #
+            #     self.fonts['play'] = [(render, rect), (render2, rect2), 0]
+            #     self.changes.add('play')
 
-                # Play text
-                play_text = tuple(self.text_getter((self.language,), 1))[0][-1]
-                render = self.font.render(play_text, True, (255, 255, 255))
-                rect = render.get_rect().move(70, 440).inflate(-4, -4)
+            def is_label_colliding(self, label_name, pos):
+                label = self.labels[label_name][0]
+                x1, x2 = label.x, label.x + 100
+                y1, y2 = label.y, label.y + 50
+                return (x1 < pos[0] < x2) and (y1 < pos[1] < y2)
 
-                render2 = self.font.render(play_text, True, (180, 180, 180))
-                rect2 = render2.get_rect().move(70, 440).inflate(-4, -4)
+            def activate_label(self, label_name):
+                if not self.labels[label_name][-1]:
+                    self.labels[label_name][-1] = True
+                    self.changes.add(label_name)
 
-                self.fonts['play'] = [(render, rect), (render2, rect2), 0]
-                self.changes.add('play')
-
-            def is_font_colliding(self, font_name, pos):
-                font = self.fonts[font_name]
-                return font[font[-1]][1].collidepoint(pos)
-
-            def activate_font(self, font_name):
-                if not self.fonts[font_name][-1]:
-                    self.fonts[font_name][-1] = True
-                    self.changes.add(font_name)
-
-            def deactivate_font(self, font_name):
-                if self.fonts[font_name][-1]:
-                    self.fonts[font_name][-1] = False
-                    self.changes.add(font_name)
-
-            def bind_events(self, event_handler):
-                self.events[MOUSEMOTION] = event_handler.mouse_motion
-                self.events[MOUSEBUTTONDOWN] = event_handler.mouse_button_down
-
-            def unbind_events(self):
-                return self.events.pop(MOUSEMOTION), self.events.pop(MOUSEBUTTONDOWN)
+            def deactivate_label(self, label_name):
+                if self.labels[label_name][-1]:
+                    self.labels[label_name][-1] = False
+                    self.changes.add(label_name)
 
             def update(self):
 
-                for font_name in self.changes:
-                    font = self.fonts[font_name]
-                    i = font[-1]
-                    self.window.blit(font[i][0], font[i][1])
+                for label_name in self.changes:
+                    if self.labels[label_name][-1]:
+                        self.labels[label_name][0].color = (125, 125, 125, 255)
+                    else:
+                        self.labels[label_name][0].color = (255, 255, 255, 255)
 
                 self.changes.clear()
 
             def activate(self):
-                super().activate()
-                self.display_text()
+                self.init_text()
+
+            def deactivate(self):
+                self.labels.clear()
+                self.changes.clear()
 
         class InGame(_ViewerPage):
 
-            def __init__(self, event_dict, action_set, level_id):
-                super().__init__(event_dict)
+            def __init__(self, event_getter, event_binding_dict, action_set, level_id):
+                super().__init__(event_binding_dict)
                 self.level_id = int(level_id)
                 self.sprites = pygame.sprite.Group()
                 self.structure_group = pygame.sprite.Group()
@@ -146,6 +159,8 @@ class Viewer(BaseViewer):
                 self.actions = action_set
                 self.bg = None
                 self.area = self.window.get_rect()
+
+                self.get_event = event_getter
 
                 self.a = np.zeros(2, dtype=np.int32)  # decalage additionnel dans la conversion pymunk <-> pygame
 
@@ -177,12 +192,18 @@ class Viewer(BaseViewer):
 
             def update(self):
                 self.a[0] = -self.player.body.position.x + self.area.width / 2
+                # self.a[1] = +self.player.body.position.y - self.area.height / 2
+                self.player_group.update()
+                self.structure_group.update(self.a)
+
                 self.sprites.clear(self.window, self.bg)
                 self.sprites.draw(self.window)
 
             def bind_events(self, event_handler):
                 self.events[KEYDOWN] = event_handler.keydown
                 self.events[KEYUP] = event_handler.keyup
+                self.events[self.get_event('LANDING')[0]] = event_handler.land
+                self.events[self.get_event('STOPPED')[0]] = event_handler.stopped
 
             def is_player_on_ground(self):
                 return pygame.sprite.spritecollideany(
