@@ -16,7 +16,7 @@ class Model:
         code = '''SELECT event_id, label FROM Events'''
         if label:
             code += f' WHERE label = "{label}"'
-            return tuple(self.cursor.execute(code))[0]
+            return tuple(self.cursor.execute(code))[0][0]
         return self.cursor.execute(code)
 
     def get_text(self, languages, text_id=-1):

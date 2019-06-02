@@ -1,6 +1,7 @@
 # -*- coding:Utf-8 -*-
 
 import pyglet
+from Classes.my_queue import DequeQueue as Queue
 
 
 class BaseViewer(pyglet.window.Window):
@@ -12,21 +13,44 @@ class BaseViewer(pyglet.window.Window):
         self.fps = fps
         self.dt = 1. / fps
 
+        self.virtual_events_queue = Queue()
+        self.virtual_events_bindings = dict()
+
         pyglet.clock.schedule_interval(self.update, self.dt)
 
     def bind(self, event_manager):
+        if not hasattr(event_manager, 'get_handlers'):
+            raise AttributeError('event_manager must have a "get_handlers" method.')
         for name, func in event_manager.get_handlers().items():
             self.set_handler(name, func)
+        if hasattr(event_manager, 'get_virtual_handlers'):
+            for event_id, func in event_manager.get_virtual_handlers().items():
+                self._bind_virtual_event(event_id, func)
 
     def unbind(self, event_manager):
-        if not isinstance(event_manager, EventManager):
-            raise ValueError('event_manager is not an instance of EventManager but of {}'.format(type(event_manager)))
+        if not hasattr(event_manager, 'get_handlers'):
+            raise AttributeError('event_manager must have a "get_handlers" method.')
         for name, func in event_manager.get_handlers().items():
             self.remove_handler(name, func)
+        if hasattr(event_manager, 'get_virtual_handlers'):
+            for event_id in event_manager.get_virtual_handlers():
+                self._unbind_virtual_event(event_id)
+
+    def _bind_virtual_event(self, event_id, callback):
+        self.virtual_events_bindings[event_id] = callback
+
+    def _unbind_virtual_event(self, event_id):
+        del self.virtual_events_bindings[event_id]
+
+    def post(self, event_id):
+        self.virtual_events_queue.put(event_id)
 
     def update(self, *args, **kwargs):
-        raise NotImplementedError
-
+        for event in self.virtual_events_queue.elements():
+            try:
+                self.virtual_events_bindings[event]()
+            except KeyError:
+                pass
 
 class BaseViewer0:
 

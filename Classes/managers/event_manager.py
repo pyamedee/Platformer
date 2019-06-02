@@ -5,8 +5,8 @@ class BaseEventManager:
 
     prefix = 'hdlr'
 
-    def __init__(self, action_handler):
-        self.action_handler = action_handler
+    def __init__(self, action_manager):
+        self.action_manager = action_manager
         self.handlers = {}
 
     def get_handlers(self):

@@ -23,12 +23,14 @@ class Viewer(BaseViewer):
         self.page_manager.switch_page('StartingPage', self.bind, self.unbind, self.model.get_text)
 
     def play(self):
-        self.page_manager.switch_page('InGame', self.model.get_event, self.events, self.actions, 1)
+        self.page_manager.switch_page('InGame', self.bind, self.unbind, 1, (self.width, self.height))
 
     def on_draw(self):
         self.page_manager.current_page.draw()
+        self.set_caption(str(pyglet.clock.get_fps()))
 
-    def update(self, _):
+    def update(self, *args, **kwargs):
+        super().update(*args, **kwargs)
         self.page_manager.current_page.update()
 
     class PageManager(BasePageManager):
@@ -148,62 +150,80 @@ class Viewer(BaseViewer):
 
         class InGame(_ViewerPage):
 
-            def __init__(self, event_getter, event_binding_dict, action_set, level_id):
-                super().__init__(event_binding_dict)
+            def __init__(self, event_binding_callback, event_unbinding_callback, level_id, screen_dimension):
+                super().__init__(event_binding_callback, event_unbinding_callback)
                 self.level_id = int(level_id)
-                self.sprites = pygame.sprite.Group()
-                self.structure_group = pygame.sprite.Group()
-                self.window = pygame.display.get_surface()
-                self.player_group = pygame.sprite.GroupSingle()
+
+                self.batch = pyglet.graphics.Batch()
+
+                self.width, self.height = screen_dimension
+
+                self.ord1 = pyglet.graphics.OrderedGroup(1)
+                self.ord0 = pyglet.graphics.OrderedGroup(0)
+
+                self.bg_image = pyglet.image.load('Images/level1_bg.png')
+                self.bg = pyglet.sprite.Sprite(self.bg_image, x=0, y=0, batch=self.batch, group=self.ord0)
+
                 self.player = None
-                self.actions = action_set
-                self.bg = None
-                self.area = self.window.get_rect()
+                self.sprites = set()
+                self.structures = set()
 
-                self.get_event = event_getter
+                self.a = np.zeros(2, dtype=np.int32)  # decalage additionnel dans la conversion pymunk <-> pyglet
+                self.locked = np.zeros(2, dtype=np.bool)
+                self.locking_coords = np.zeros(2, np.int64)
 
-                self.a = np.zeros(2, dtype=np.int32)  # decalage additionnel dans la conversion pymunk <-> pygame
-
-            def display_bg(self, label):
-                image = pygame.image.load('Images\\level1_bg.png').convert()
-                self.window.blit(image, image.get_rect())
-                self.bg = image
+            def draw(self):
+                self.batch.draw()
 
             def load_structures(self, structures):
-                image = pygame.image.load('Images\\platform.png').convert_alpha()
+                image = pyglet.image.load('Images/platform.png')
                 for structure in structures:
                     label = structure[4]
                     print(structure)
-                    sprite = sprites.Structure(structure[2:4], image)
+                    sprite = sprites.Structure(image,
+                                               x=structure[2], y=structure[3], batch=self.batch, group=self.ord1)
                     self.sprites.add(sprite)
-                    self.structure_group.add(sprite)
+                    self.structures.add(sprite)
 
             def load_player(self, coords):
 
-                image = pygame.image.load('Images\\player.png').convert_alpha()
+                image = pyglet.image.load('Images/player.png')
                 print(coords)
-                player = sprites.Player(coords, image)
+                player = sprites.Player(image, x=coords[0], y=coords[1], batch=self.batch, group=self.ord1)
                 self.sprites.add(player)
-                self.player_group.add(player)
                 self.player = player
 
-            def display(self):
-                self.sprites.draw(self.window)
+            @staticmethod
+            def update():
+                pass
 
-            def update(self):
-                self.a[0] = -self.player.body.position.x + self.area.width / 2
-                # self.a[1] = +self.player.body.position.y - self.area.height / 2
-                self.player_group.update()
-                self.structure_group.update(self.a)
+            def lock_axis(self, x=False, y=False):
+                if x:
+                    self.locked[0] = True
+                    self.locking_coords[0] = self.player.body.position.x + self.a[0]
+                if y:
+                    self.locked[1] = True
+                    self.locking_coords[1] = self.player.body.position.y + self.a[1]
 
-                self.sprites.clear(self.window, self.bg)
-                self.sprites.draw(self.window)
+            def unlock_axis(self, x=False, y=False):
+                if x:
+                    self.locked[0] = False
+                if y:
+                    self.locked[1] = False
 
-            def bind_events(self, event_handler):
-                self.events[KEYDOWN] = event_handler.keydown
-                self.events[KEYUP] = event_handler.keyup
-                self.events[self.get_event('LANDING')[0]] = event_handler.land
-                self.events[self.get_event('STOPPED')[0]] = event_handler.stopped
+            def update_(self):
+                x = y = None
+                if self.locked[0]:
+                    x = self.locking_coords[0]
+                    self.a[0] = -self.player.body.position.x + x
+
+                if self.locked[1]:
+                    y = self.locking_coords[1]
+                    self.a[1] = -self.player.body.position.y + y
+
+                for sprite in self.structures:
+                    sprite.update(self.a)
+                self.player.update(x, y, self.a)
 
             def is_player_on_ground(self):
                 return pygame.sprite.spritecollideany(
@@ -218,11 +238,11 @@ class Viewer(BaseViewer):
             def collide(rect, sprite):
                 return rect.colliderect(sprite.rect)
 
-            def to_pygame(self, p):
-                return np.array(pymunk.pygame_util.to_pygame(p, self.window)) + self.a
-
-            def from_pygame(self, p):
-                return np.array(pymunk.pygame_util.to_pygame(p, self.window)) - self.a
+            # def to_pygame(self, p):
+            #     return np.array(pymunk.pygame_util.to_pygame(p, self.window)) + self.a
+            #
+            # def from_pygame(self, p):
+            #     return np.array(pymunk.pygame_util.to_pygame(p, self.window)) - self.a
 
             def activate(self):
                 pass

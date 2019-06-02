@@ -5,9 +5,11 @@ import math
 
 import numpy as np
 import pymunk
-from pygame.locals import *
 from pymunk.vec2d import Vec2d
-import pymunk.pygame_util
+import pymunk.pyglet_util
+
+import pyglet
+from pyglet.window import key
 
 from operator import truth
 import pygame.key
@@ -94,10 +96,11 @@ class Controller:
                     pos = x, y
                     for label in self.viewer_page.labels.keys():
                         if self.viewer_page.is_label_colliding(label, pos):
-                            self.action_handler('do', label)
+                            return self.action_manager('do', label)
 
             class ActionManager(BaseActionManager):
                 def __init__(self, viewer, play_callback):
+
                     self.do_quit = viewer.close
                     self.do_play = play_callback
 
@@ -110,13 +113,12 @@ class Controller:
                 self.viewer_page = None
                 self.player_coords = np.array(self.level[1:3], dtype=np.int64)
 
-                self.event_handler = None
-                self.action_handler = None
+                self.event_manager = None
+                self.action_manager = None
 
-                self.action_queue = OrderedSet()
+                # self.action_queue = OrderedSet()
 
-                self.todo = np.zeros(5, dtype=np.uint8)
-
+                # self.todo = np.zeros(5, dtype=np.uint8)
 
                 self.gravity = (0, -1000)
                 self.space = self.init_pymunk_space(self.gravity)
@@ -127,7 +129,7 @@ class Controller:
                 self.player = None
 
                 self.spups = 5  # number of space updates per second
-                self.dt = 1. / self.viewer.FRAMERATE / self.spups
+                self.dt = 1. / self.viewer.fps / self.spups
 
             @staticmethod
             def init_pymunk_space(gravity):
@@ -139,71 +141,88 @@ class Controller:
             def activate(self):
                 logger.debug('play button was pressed')
                 self.viewer_page = self.viewer.page_manager.current_page
-                self.draw_configuration = pymunk.pygame_util.DrawOptions(self.viewer_page.window)
-                self.viewer_page.display_bg(self.level[3])
+                # self.draw_configuration = pymunk.pyglet_util.DrawOptions()
+                # self.viewer_page.display_bg(self.level[3])
 
                 self.viewer_page.load_structures(self.structure_getter)
                 self.viewer_page.load_player(self.player_coords)
 
                 self.player = self.viewer_page.player
 
-                self.viewer_page.display()
                 logger.debug('Structure and player were loaded')
 
-                self.action_handler = self.ActionHandler(self.viewer_page, self.viewer.stop_loop)
-                self.event_handler = self.EventHandler(self.viewer_page, self.action_handler)
+                self.action_manager = self.ActionManager(self.viewer_page, self.viewer.close)
+                self.event_manager = self.EventManager(self.viewer_page, self.model.get_event, self.action_manager)
 
-                self.viewer_page.bind_events(self.event_handler)
-                self.viewer_page.actions.add(self.update)
+                self.viewer_page.bind(self.event_manager)
 
-                self.viewer_page.player.init_body(self.to_pygame, self.from_pygame, 1.3, 25000)
+                self.viewer_page.player.init_body(1.3, 25000)
                 self.player.add_to_space(self.space)
 
-                sprites = self.viewer_page.structure_group.sprites()
-                for structure in sprites:
-                    structure.init_body(self.to_pygame, self.from_pygame,
-                                        self.from_pygame((structure.rect.right, structure.rect.top)),
-                                        self.from_pygame((structure.rect.left, structure.rect.top)),
-                                        self.from_pygame((structure.rect.right, structure.rect.bottom)),
-                                        self.from_pygame((structure.rect.left, structure.rect.bottom)))
-                self.space.add(Structure.body, [s.shape for s in sprites])
+                structures = self.viewer_page.structures
+                for structure in structures:
+                    image = structure.image
+                    x, y = structure.x, structure.y
+                    structure.init_body((image.anchor_x + image.width + x, image.anchor_y + image.height + y),
+                                        (image.anchor_x + x, image.anchor_y + image.height + y),
+                                        (image.anchor_x + x, image.anchor_y + y),
+                                        (image.anchor_x + image.width + x, image.anchor_y + y))
+                self.space.add(Structure.body, [s.shape for s in structures])
+
+                self.viewer_page.update = self.update
+                self.viewer_page.lock_axis(x=True)
+
+            def update(self):
+                self._update()
+                self.viewer_page.update_()
 
             def deactivate(self):
                 pass
 
-            class EventHandler(BaseEventManager):
-                def __init__(self, viewer_page, action_handler):
-                    super().__init__(viewer_page, action_handler)
+            class EventManager(BaseEventManager):
+                def __init__(self, viewer_page, event_getter, action_manager):
+                    super().__init__(action_manager)
+                    self.viewer_page = viewer_page
                     self.controls = {
-                        K_d: ('move_right', 'move'),
-                        K_a: ('move_left', 'move'),
-                        K_SPACE: ('jump', None),
-                        K_ESCAPE: ('quit', None),
+                        key.D: ('move_right', 'move'),
+                        key.Q: ('move_left', 'move'),
+                        key.SPACE: ('jump', None),
+                        key.ESCAPE: ('quit', None),
+                        key.P: ('lock', None),
+                        key.M: ('unlock', None)
                     }
+                    self.handlers = {'on_key_press': self.keydown,
+                                     'on_key_release': self.keyup}
+                    self.virtual_handlers = {event_getter('LANDING'): self.land,
+                                             event_getter('STOPPED'): self.stopped}
 
-                def keydown(self, evt):
+                def get_virtual_handlers(self):
+                    return self.virtual_handlers
+
+                def keydown(self, symbol, *_, **__):
                     try:
-                        action_name = self.controls[evt.key]
+                        action_name = self.controls[symbol]
                     except KeyError:
                         return
 
-                    self.action_handler('do', action_name[0])
+                    self.action_manager('do', action_name[0])
 
-                def keyup(self, evt):
+                def keyup(self, symbol, *_, **__):
                     try:
-                        action_name = self.controls[evt.key]
+                        action_name = self.controls[symbol]
                     except KeyError:
                         return
 
-                    self.action_handler('stop', action_name[1])
+                    self.action_manager('stop', action_name[1])
 
-                def land(self, _):
-                    self.action_handler.clear_flying_queue()
+                def land(self, *_, **__):
+                    print(0)
+                    self.action_manager.clear_flying_queue()
 
-                def stopped(self, _):
-                    self.action_handler.clear_stopping_queue()
+                def stopped(self, *_, **__):
+                    self.action_manager.clear_stopping_queue()
 
-            class ActionHandler(BaseActionManager):
+            class ActionManager(BaseActionManager):
 
                 def __init__(self, viewer_page, quit_callback):
                     self.viewer_page = viewer_page
@@ -212,6 +231,12 @@ class Controller:
                     self.flying_queue = Queue()
                     self.action_queue = Queue()
                     self.stopping_queue = Queue()
+
+                def do_lock(self):
+                    self.viewer_page.lock_axis(x=True)
+
+                def do_unlock(self):
+                    self.viewer_page.unlock_axis(x=True)
 
                 def do_move_right(self):
                     if self.player.on_ground:
@@ -247,9 +272,9 @@ class Controller:
 
                 def do_jump(self):
                     if self.player.on_ground:
-                        self.player.body.apply_impulse_at_world_point(
-                            (0, 500),
-                            self.player.body.position + self.player.body.center_of_gravity)
+                        if self.player.is_stopping:
+                            return
+                        self.player.is_jumping = True
 
                 def clear_flying_queue(self):
                     self.action_queue.update(self.flying_queue.elements())
@@ -261,11 +286,11 @@ class Controller:
                     for action in self.action_queue.elements():
                         action()
 
-            def from_pygame(self, d):
-                return self.viewer_page.from_pygame(d)
-
-            def to_pygame(self, d):
-                return self.viewer_page.to_pygame(d)
+            # def from_pygame(self, d):
+            #     return self.viewer_page.from_pygame(d)
+            #
+            # def to_pygame(self, d):
+            #     return self.viewer_page.to_pygame(d)
 
             def is_on_ground(self, arbiter):
                 shapes = arbiter.shapes
@@ -278,34 +303,34 @@ class Controller:
                 modif = truth(is_mods) + 1
                 div = math.sqrt(self.v.dot(self.v)) / 4 + 1
                 self.player.body.apply_force_at_local_point(
-                    Vec2d(self.player.VELOCITY / div * self.player.direction / modif * self.spups, 0), (0, 0))
+                    Vec2d(self.player.VELOCITY / div * self.player.direction * self.spups, 0), (0, 0))
 
             def stop(self):
                 if self.player.bf > 30:
                     self.player.is_stumbling = True
                 if round(self.v.x) * self.player.direction <= 0:
-                    pygame.event.post(pygame.event.Event(self.model.get_event('STOPPED')[0]))
+                    self.viewer.post(self.model.get_event('STOPPED'))
                     self.player.stopped = True
                     self.player.is_stopping = False
                 else:
                     self.player.bf += 1
                     self.player.body.apply_force_at_local_point(
-                        Vec2d(-self.player.VELOCITY * self.spups / 15 * self.player.direction, 0), (0, 0))
+                        Vec2d(-self.player.VELOCITY * self.spups / 8 * self.player.direction, 0), (0, 0))
 
-            def update(self):
-                self.mods = pygame.key.get_mods()
+            def _update(self):
+                # self.mods = pyglet.graphics.get_mods()
                 self.v = self.player.body.velocity
 
-                self.action_handler.execute_action_queue()
+                self.action_manager.execute_action_queue()
 
                 before = self.player.on_ground
                 self.player.on_ground = False
                 self.player.body.each_arbiter(self.is_on_ground)
                 if not before and self.player.on_ground:
-                    pygame.event.post(pygame.event.Event(self.model.get_event('LANDING')[0]))
+                    self.viewer.post(self.model.get_event('LANDING'))
 
                 if self.player.is_moving:
-                    self.move(self.mods & KMOD_LCTRL)
+                    self.move(0)
 
                 elif self.player.is_stopping:
                     self.stop()
@@ -314,14 +339,20 @@ class Controller:
                     self.player.body.velocity -= Vec2d(self.v.x, 0)
 
                 elif self.player.is_stumbling:
-                    if round(v.x) == 0:
+                    if round(self.v.x) == 0:
                         self.player.is_stumbling = False
                     else:
                         print('stumbling')
+
+                if self.player.is_jumping and self.player.on_ground:
+                    self.player.is_jumping = False
+                    self.player.body.apply_impulse_at_world_point(
+                        (0, 500),
+                        self.player.body.position + self.player.body.center_of_gravity)
 
                 for _ in range(self.spups):
                     self.space.step(self.dt)
 
                 # self.viewer_page.player_group.update()
                 # self.viewer_page.structure_group.update(self.viewer_page.a)
-                #self.space.debug_draw(self.draw_configuration)
+                # self.space.debug_draw(self.draw_configuration)

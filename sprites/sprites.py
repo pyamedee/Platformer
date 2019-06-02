@@ -2,8 +2,7 @@
 
 import numpy as np
 from numpy import cos, sin
-from pygame import Rect
-from pygame.sprite import Sprite
+from pyglet.sprite import Sprite
 import pymunk
 from math import pi
 from pymunk.vec2d import Vec2d
@@ -11,95 +10,77 @@ from pymunk.vec2d import Vec2d
 D45 = pi / 4
 
 
-class BaseSprite(Sprite):
-
-    def __init__(self, coords, image):
-        super().__init__()
-        self.image = image
-        self.rect = image.get_rect()
-        self.rect.x, self.rect.y = coords
-        self.coords = coords
-
-
-class Structure(BaseSprite):
+class Structure(Sprite):
     body = pymunk.Body(body_type=pymunk.Body.STATIC)
     body.position = 0, 0
 
-    def __init__(self, coords, image):
-        super().__init__(coords, image)
+    def __init__(self, image, *args, **kwargs):
+        super().__init__(image, *args, **kwargs)
 
-        self.radius = self.rect.width
-        self.base_coords = tuple(self.coords)
+        self.radius = self.image.width
+        self.base_coords = self.x, self.y
 
         self.to_pygame = self.from_pygame = self.shape = self.a = self.b = None
 
-    def init_body(self, to_pygame_callback, from_pygame_callback, a, b, c, d, iswall=False):
-        self.from_pygame = from_pygame_callback
-        self.to_pygame = to_pygame_callback
-
+    def init_body(self, a, b, c, d, iswall=False):
+        print(a, b, c, d)
         self.shape = pymunk.Poly(type(self).body, (a, b, c, d))
         self.shape.friction = 1
         self.shape.iswall = iswall
         self.shape.is_structure = True
-        self.a = self.to_pygame(a)
-        self.b = self.to_pygame(b)
 
     def update(self, a):
-        self.coords = self.base_coords + a
-        self.rect.x, self.rect.y = self.coords
+        self.x, self.y = self.base_coords + a
         # - Vec2d(
         # self.rect.width / 2, self.rect.height - self.radius)
 
 
-class Player0(BaseSprite):
-    def __init__(self, coords, image):
-        super(Player, self).__init__(coords, image)
-        self.isfalling = False
-        self.bottom_rect = None
-        self.place(self.rect.left, self.rect.top)
-        self.vector = np.zeros(2, dtype=np.int)
+# class Player0(BaseSprite):
+#     def __init__(self, coords, image):
+#         super(Player, self).__init__(coords, image)
+#         self.isfalling = False
+#         self.bottom_rect = None
+#         self.place(self.rect.left, self.rect.top)
+#         self.vector = np.zeros(2, dtype=np.int)
+#
+#     def place(self, left, top):
+#         self.rect = Rect(left, top, self.rect.width, self.rect.height)
+#         t = self.rect.width * 8 // 25
+#         self.bottom_rect = Rect(left + t, self.rect.bottom, self.rect.width - 2 * t, 5)
+#
+#     def update(self, dx, dy):
+#         super(Player, self).update(dx, dy)
+#         self.bottom_rect.move_ip(dx, dy)
 
-    def place(self, left, top):
-        self.rect = Rect(left, top, self.rect.width, self.rect.height)
-        t = self.rect.width * 8 // 25
-        self.bottom_rect = Rect(left + t, self.rect.bottom, self.rect.width - 2 * t, 5)
 
-    def update(self, dx, dy):
-        super(Player, self).update(dx, dy)
-        self.bottom_rect.move_ip(dx, dy)
-
-
-class Player(BaseSprite):
-    def __init__(self, coords, image):
-        super().__init__(coords, image)
-        self.image = image
+class Player(Sprite):
+    def __init__(self, image, *args, **kwargs):
+        super().__init__(image, *args, **kwargs)
 
         self.is_moving = False
         self.is_stumbling = False
         self.on_ground = False
         self.is_stopping = False
         self.stopped = True
+        self.is_jumping = False
 
         self.bf = 1
         self.direction = 1
 
-        self.to_pygame = self.from_pygame = self.mass = self.radius = self.points = self.moment = self.body = None
+        self.mass = self.radius = self.points = self.moment = self.body = None
         self.shape = self.VELOCITY = None
 
-    def init_body(self, to_pygame_callback, from_pygame_callback, mass, velocity):
-        
-        self.to_pygame = to_pygame_callback
-        self.from_pygame = from_pygame_callback
+    def init_body(self, mass, velocity):
         
         self.mass = mass  # 1.3
-        self.radius = self.rect.width / 2
+        self.radius = self.image.width / 2
         self.points = ((-self.radius, -self.radius),
                        (self.radius, -self.radius),
                        (self.radius, self.radius),
                        (-self.radius, self.radius))
         self.moment = pymunk.moment_for_poly(self.mass, self.points)
         self.body = pymunk.Body(mass=self.mass, moment=self.moment)
-        self.body.position = self.from_pygame(self.coords)
+        self.body.position = self.x, self.y
         
         self.shape = pymunk.Poly(self.body, self.points)
         self.shape.friction = 0.2
@@ -109,14 +90,19 @@ class Player(BaseSprite):
         space.add(self.body, self.shape)
         return self.shape
     
-    def update(self):
-        self.coords = self.to_pygame(self.body.position)
+    def update(self, x=None, y=None, a=(0, 0)):
+        coords = self.body.position
+        if x is not None:
+            coords[0] = x
+        if y is not None:
+            coords[1] = y
+        if x is y is None:
+            coords += a
         if abs(self.body.angle) > D45:
             if self.body.angle < 0:
                 self.body.angle += D45 * 2
             else:
                 self.body.angle -= D45 * 2
                  
-        self.rect.x, self.rect.y = self.coords - Vec2d(
-            self.rect.width / 2, self.rect.height - self.radius)
+        self.x, self.y = coords - self.image.width / 2
 
