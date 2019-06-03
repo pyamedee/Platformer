@@ -56,6 +56,26 @@ class Model:
 
         return self.cursor.execute(code, args)
 
+    def get_static_lines(self, structure):
+        cursor = self.cursor.execute('''SELECT id, structure_id, a_x, a_y, b_x, b_y, thickness, iswall
+        FROM StaticLines WHERE structure_id = ?''', (structure,))
+
+        return tuple(cursor)
+
+    def get_static_poly(self, structure, format_points=False):
+        cursor = self.cursor.execute('''SELECT id, structure_id, points, thickness, iswall
+        FROM StaticPoly WHERE structure_id = ?''', (structure,))
+
+        if format_points:
+            data = [list(v) for v in list(cursor)]
+            for a in data:
+                points = a[2]
+                a[2] = []
+                for point in points.split(' ; '):
+                    a[2].append(tuple(int(value) for value in point.split(',')))
+            return data
+        return tuple(cursor)
+
     def structure_getter(self, level_id=-1):
         return self._StructureGetter(self.get_structures(level_id))
 

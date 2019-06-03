@@ -52,6 +52,7 @@ class BaseViewer(pyglet.window.Window):
             except KeyError:
                 pass
 
+
 class BaseViewer0:
 
     def __init__(self, framerate, logger):

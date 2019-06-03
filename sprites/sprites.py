@@ -73,11 +73,12 @@ class Player(Sprite):
     def init_body(self, mass, velocity):
         
         self.mass = mass  # 1.3
-        self.radius = self.image.width / 2
+        self.radius = self.image.width / 3
         self.points = ((-self.radius, -self.radius),
                        (self.radius, -self.radius),
                        (self.radius, self.radius),
                        (-self.radius, self.radius))
+
         self.moment = pymunk.moment_for_poly(self.mass, self.points)
         self.body = pymunk.Body(mass=self.mass, moment=self.moment)
         self.body.position = self.x, self.y
@@ -104,5 +105,5 @@ class Player(Sprite):
             else:
                 self.body.angle -= D45 * 2
                  
-        self.x, self.y = coords - self.image.width / 2
+        self.x, self.y = coords - (self.image.width / 2, self.radius)
 

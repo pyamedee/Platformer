@@ -3,7 +3,6 @@
 from Scripts.logger import logger
 import pyglet
 
-import pymunk.pygame_util
 import numpy as np
 
 from Classes.managers import BasePageManager
@@ -237,12 +236,6 @@ class Viewer(BaseViewer):
             @staticmethod
             def collide(rect, sprite):
                 return rect.colliderect(sprite.rect)
-
-            # def to_pygame(self, p):
-            #     return np.array(pymunk.pygame_util.to_pygame(p, self.window)) + self.a
-            #
-            # def from_pygame(self, p):
-            #     return np.array(pymunk.pygame_util.to_pygame(p, self.window)) - self.a
 
             def activate(self):
                 pass

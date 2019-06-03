@@ -82,7 +82,6 @@ class Controller:
                 def get_handlers(self):
                     return self.handlers
 
-                # TODO: changer ça (pas bien)
                 def mouse_motion(self, x, y, *_, **__):
                     pos = x, y
                     for label in self.viewer_page.labels.keys():
@@ -115,10 +114,6 @@ class Controller:
 
                 self.event_manager = None
                 self.action_manager = None
-
-                # self.action_queue = OrderedSet()
-
-                # self.todo = np.zeros(5, dtype=np.uint8)
 
                 self.gravity = (0, -1000)
                 self.space = self.init_pymunk_space(self.gravity)
@@ -216,7 +211,6 @@ class Controller:
                     self.action_manager('stop', action_name[1])
 
                 def land(self, *_, **__):
-                    print(0)
                     self.action_manager.clear_flying_queue()
 
                 def stopped(self, *_, **__):
@@ -245,7 +239,15 @@ class Controller:
                         self.player.direction = 1
                         self._move()
                     else:
-                        self.flying_queue.put(self.do_move_right)
+                        self.flying_queue.put(self._landing_move_right)
+
+                def _landing_move_right(self):
+                    self.do_move_right()
+                    self.player.body.velocity = Vec2d(0, 0)
+
+                def _landing_move_left(self):
+                    self.do_move_left()
+                    self.player.body.velocity = Vec2d(0, 0)
 
                 def do_move_left(self):
                     if self.player.on_ground:
@@ -254,7 +256,7 @@ class Controller:
                         self.player.direction = -1
                         self._move()
                     else:
-                        self.flying_queue.put(self.do_move_left)
+                        self.flying_queue.put(self._landing_move_left)
 
                 def _move(self):
                     self.player.bf = 1
@@ -277,6 +279,7 @@ class Controller:
                         self.player.is_jumping = True
 
                 def clear_flying_queue(self):
+                    print(self.flying_queue)
                     self.action_queue.update(self.flying_queue.elements())
 
                 def clear_stopping_queue(self):
@@ -285,12 +288,6 @@ class Controller:
                 def execute_action_queue(self):
                     for action in self.action_queue.elements():
                         action()
-
-            # def from_pygame(self, d):
-            #     return self.viewer_page.from_pygame(d)
-            #
-            # def to_pygame(self, d):
-            #     return self.viewer_page.to_pygame(d)
 
             def is_on_ground(self, arbiter):
                 shapes = arbiter.shapes
@@ -301,7 +298,7 @@ class Controller:
 
             def move(self, is_mods):
                 modif = truth(is_mods) + 1
-                div = math.sqrt(self.v.dot(self.v)) / 4 + 1
+                div = math.sqrt(self.v.x ** 2 + (self.v.y / 2) ** 2) / 4 + 1
                 self.player.body.apply_force_at_local_point(
                     Vec2d(self.player.VELOCITY / div * self.player.direction * self.spups, 0), (0, 0))
 
@@ -318,16 +315,18 @@ class Controller:
                         Vec2d(-self.player.VELOCITY * self.spups / 8 * self.player.direction, 0), (0, 0))
 
             def _update(self):
-                # self.mods = pyglet.graphics.get_mods()
-                self.v = self.player.body.velocity
-
                 self.action_manager.execute_action_queue()
-
+                self.v = self.player.body.velocity
+                # print(round(self.v.x, 4), round(self.v.y, 4))
                 before = self.player.on_ground
                 self.player.on_ground = False
                 self.player.body.each_arbiter(self.is_on_ground)
                 if not before and self.player.on_ground:
                     self.viewer.post(self.model.get_event('LANDING'))
+
+                if not self.player.on_ground:
+                    self.player.is_moving = False
+                    self.player.is_stopping = False
 
                 if self.player.is_moving:
                     self.move(0)

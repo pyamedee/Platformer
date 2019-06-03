@@ -20,6 +20,9 @@ class BaseQueue:
     def __len__(self):
         return len(self._queue)
 
+    def __contains__(self, item):
+        return item in self._queue
+
     @staticmethod
     def init_queue(d):
         raise NotImplementedError
