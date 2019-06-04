@@ -30,6 +30,9 @@ class BaseQueue:
     def get(self):
         raise NotImplementedError
 
+    def last(self):
+        return self._queue[-1]
+
     def put(self, element):
         self._queue.append(element)
 
@@ -101,6 +104,13 @@ class DequeQueue(BaseQueue):
         if copy:
             return self._queue.copy()
         return self._queue
+
+    def pop_last(self):
+        try:
+            return self._queue.pop()
+        except IndexError:
+            pass
+        raise Empty
 
 
 class StackQueue(BaseQueue):

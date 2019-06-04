@@ -151,7 +151,7 @@ class Controller:
 
                 self.viewer_page.bind(self.event_manager)
 
-                self.viewer_page.player.init_body(1.3, 25000)
+                self.viewer_page.player.init_body(1.3, 35000)
                 self.player.add_to_space(self.space)
 
                 structures = self.viewer_page.structures
@@ -225,6 +225,7 @@ class Controller:
                     self.flying_queue = Queue()
                     self.action_queue = Queue()
                     self.stopping_queue = Queue()
+                    self.move_or_stop = None
 
                 def do_lock(self):
                     self.viewer_page.lock_axis(x=True)
@@ -233,30 +234,26 @@ class Controller:
                     self.viewer_page.unlock_axis(x=True)
 
                 def do_move_right(self):
-                    if self.player.on_ground:
-                        if self.player.is_stopping:
-                            return self.stopping_queue.put(self.do_move_right)
+                    if self.player.is_moving:
+                        return
+                    if not self.player.on_ground:
+                        self.move_or_stop = self.do_move_right
+                        return
+                    if not self.player.is_stopping:
                         self.player.direction = 1
-                        self._move()
-                    else:
-                        self.flying_queue.put(self._landing_move_right)
-
-                def _landing_move_right(self):
-                    self.do_move_right()
-                    self.player.body.velocity = Vec2d(0, 0)
-
-                def _landing_move_left(self):
-                    self.do_move_left()
-                    self.player.body.velocity = Vec2d(0, 0)
+                        return self._move()
+                    self.stopping_queue.put(self.do_move_right)
 
                 def do_move_left(self):
-                    if self.player.on_ground:
-                        if self.player.is_stopping:
-                            return self.stopping_queue.put(self.do_move_left)
+                    if self.player.is_moving:
+                        return
+                    if not self.player.on_ground:
+                        self.move_or_stop = self.do_move_left
+                        return
+                    if not self.player.is_stopping:
                         self.player.direction = -1
-                        self._move()
-                    else:
-                        self.flying_queue.put(self._landing_move_left)
+                        return self._move()
+                    self.stopping_queue.put(self.do_move_left)
 
                 def _move(self):
                     self.player.bf = 1
@@ -264,13 +261,11 @@ class Controller:
                     self.player.is_moving = True
 
                 def stop_move(self):
-                    if self.player.on_ground:
-                        if self.player.is_stopping:
-                            self.stopping_queue.put(self.stop_move)
-                        self.player.is_moving = False
-                        self.player.is_stopping = True
-                    else:
-                        self.flying_queue.put(self.stop_move)
+                    if not self.player.on_ground:
+                        self.move_or_stop = self.stop_move
+                        return
+                    self.player.is_moving = False
+                    self.player.is_stopping = True
 
                 def do_jump(self):
                     if self.player.on_ground:
@@ -279,7 +274,12 @@ class Controller:
                         self.player.is_jumping = True
 
                 def clear_flying_queue(self):
-                    print(self.flying_queue)
+                    if self.move_or_stop is not None:
+                        if self.move_or_stop.direction * self.player.body.velocity.x < 0:
+                            self.stopping_queue.put(self.move_or_stop)
+                            self.move_or_stop = self.stop_move
+                        self.move_or_stop()
+                        self.move_or_stop = None
                     self.action_queue.update(self.flying_queue.elements())
 
                 def clear_stopping_queue(self):
@@ -289,6 +289,10 @@ class Controller:
                     for action in self.action_queue.elements():
                         action()
 
+                do_move_right.direction = 1
+                do_move_left.direction = -1
+                stop_move.direction = np.nan
+
             def is_on_ground(self, arbiter):
                 shapes = arbiter.shapes
                 for shape in shapes:
@@ -297,8 +301,9 @@ class Controller:
                         return
 
             def move(self, is_mods):
+                print(self.v)
                 modif = truth(is_mods) + 1
-                div = math.sqrt(self.v.x ** 2 + (self.v.y / 2) ** 2) / 4 + 1
+                div = math.sqrt(self.v.x ** 2 + (self.v.y / 2) ** 2) / 6 + 1
                 self.player.body.apply_force_at_local_point(
                     Vec2d(self.player.VELOCITY / div * self.player.direction * self.spups, 0), (0, 0))
 
@@ -317,25 +322,31 @@ class Controller:
             def _update(self):
                 self.action_manager.execute_action_queue()
                 self.v = self.player.body.velocity
-                # print(round(self.v.x, 4), round(self.v.y, 4))
                 before = self.player.on_ground
                 self.player.on_ground = False
                 self.player.body.each_arbiter(self.is_on_ground)
                 if not before and self.player.on_ground:
                     self.viewer.post(self.model.get_event('LANDING'))
 
-                if not self.player.on_ground:
-                    self.player.is_moving = False
+                if self.player.on_ground:
+                    if self.player.is_moving:
+                        self.move(0)
+
+                    elif self.player.is_stopping:
+                        self.stop()
+
+                else:
+                    if self.player.is_moving:
+                        self.player.is_moving = False
+                        if self.player.direction == -1:
+                            self.action_manager.move_or_stop = self.action_manager.do_move_left
+                        else:
+                            self.action_manager.move_or_stop = self.action_manager.do_move_right
                     self.player.is_stopping = False
-
-                if self.player.is_moving:
-                    self.move(0)
-
-                elif self.player.is_stopping:
-                    self.stop()
 
                 if self.player.stopped:
                     self.player.body.velocity -= Vec2d(self.v.x, 0)
+                    self.player.direction = 0
 
                 elif self.player.is_stumbling:
                     if round(self.v.x) == 0:
@@ -346,12 +357,10 @@ class Controller:
                 if self.player.is_jumping and self.player.on_ground:
                     self.player.is_jumping = False
                     self.player.body.apply_impulse_at_world_point(
-                        (0, 500),
+                        (0, 700),
                         self.player.body.position + self.player.body.center_of_gravity)
 
                 for _ in range(self.spups):
                     self.space.step(self.dt)
 
-                # self.viewer_page.player_group.update()
-                # self.viewer_page.structure_group.update(self.viewer_page.a)
                 # self.space.debug_draw(self.draw_configuration)

@@ -14,7 +14,7 @@ def bg_transparency(img, color):
 
 
 image = Image.open('base_platform.jpg').convert('RGBA')
-size = [int(round(a / 8)) for a in image.size]
+size = [int(round(a / 5)) for a in image.size]
 image.putdata(bg_transparency(image, (255, 255, 255, 255)))
 
 image = ImageOps.fit(image, size, Image.ANTIALIAS)

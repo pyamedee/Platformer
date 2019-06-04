@@ -66,7 +66,6 @@ class Viewer(BaseViewer):
                 super().__init__(event_binding_callback, event_unbinding_callback, bg_path)
 
                 self.text_getter = text_getter
-                #self.font = pygame.font.Font(sp_cfg['font'], sp_cfg.getint('font_size'))
                 self.labels = dict()
                 self.label_batch = pyglet.graphics.Batch()
                 self.changes = set()
@@ -74,45 +73,23 @@ class Viewer(BaseViewer):
                 self.language = general_cfg['language']
 
             def init_text(self):
+                font_size = sp_cfg.getint('font_size')
+                font = sp_cfg['font']
                 quit_txt = tuple(self.text_getter((self.language,), 2))[0][-1]
                 self.labels['quit'] = [pyglet.text.Label(quit_txt,
-                                                         font_name='Lucida', batch=self.label_batch,
-                                                         font_size=36, x=70, y=100, color=(255, 255, 255, 255)),
+                                                         font_name=font, batch=self.label_batch,
+                                                         font_size=font_size, x=70, y=100, color=(255, 255, 255, 255)),
                                        True]
 
                 play_txt = tuple(self.text_getter((self.language,), 1))[0][-1]
                 self.labels['play'] = [pyglet.text.Label(play_txt,
-                                                         font_name='Lucida', batch=self.label_batch,
-                                                         font_size=36, x=70, y=200, color=(255, 255, 255, 255)),
+                                                         font_name=font, batch=self.label_batch,
+                                                         font_size=font_size, x=70, y=200, color=(255, 255, 255, 255)),
                                        True]
 
             def draw(self):
                 super().draw()
                 self.label_batch.draw()
-
-            # def display_text(self):
-            #
-            #     # Quit text
-            #     quit_text = tuple(self.text_getter((self.language,), 2))[0][-1]
-            #     render = self.font.render(quit_text, True, (255, 255, 255))
-            #     rect = render.get_rect().move(70, 540).inflate(-4, -4)
-            #
-            #     render2 = self.font.render(quit_text, True, (180, 180, 180))
-            #     rect2 = render2.get_rect().move(70, 540).inflate(-4, -4)
-            #
-            #     self.fonts['quit'] = [(render, rect), (render2, rect2), 0]
-            #     self.changes.add('quit')
-            #
-            #     # Play text
-            #     play_text = tuple(self.text_getter((self.language,), 1))[0][-1]
-            #     render = self.font.render(play_text, True, (255, 255, 255))
-            #     rect = render.get_rect().move(70, 440).inflate(-4, -4)
-            #
-            #     render2 = self.font.render(play_text, True, (180, 180, 180))
-            #     rect2 = render2.get_rect().move(70, 440).inflate(-4, -4)
-            #
-            #     self.fonts['play'] = [(render, rect), (render2, rect2), 0]
-            #     self.changes.add('play')
 
             def is_label_colliding(self, label_name, pos):
                 label = self.labels[label_name][0]
@@ -223,19 +200,6 @@ class Viewer(BaseViewer):
                 for sprite in self.structures:
                     sprite.update(self.a)
                 self.player.update(x, y, self.a)
-
-            def is_player_on_ground(self):
-                return pygame.sprite.spritecollideany(
-                    self.player.bottom_rect.move(self.player.vector / 10),
-                    self.structure_group,
-                    collided=self.collide)
-
-            def refresh_structures(self):
-                self.structure_group.draw(self.window)
-
-            @staticmethod
-            def collide(rect, sprite):
-                return rect.colliderect(sprite.rect)
 
             def activate(self):
                 pass
