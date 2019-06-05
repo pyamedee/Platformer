@@ -136,7 +136,7 @@ class Controller:
             def activate(self):
                 logger.debug('play button was pressed')
                 self.viewer_page = self.viewer.page_manager.current_page
-                # self.draw_configuration = pymunk.pyglet_util.DrawOptions()
+                self.draw_configuration = pymunk.pyglet_util.DrawOptions()
                 # self.viewer_page.display_bg(self.level[3])
 
                 self.viewer_page.load_structures(self.structure_getter)
@@ -154,15 +154,20 @@ class Controller:
                 self.viewer_page.player.init_body(1.3, 35000)
                 self.player.add_to_space(self.space)
 
+                shapes = set()
                 structures = self.viewer_page.structures
                 for structure in structures:
-                    image = structure.image
-                    x, y = structure.x, structure.y
-                    structure.init_body((image.anchor_x + image.width + x, image.anchor_y + image.height + y),
-                                        (image.anchor_x + x, image.anchor_y + image.height + y),
-                                        (image.anchor_x + x, image.anchor_y + y),
-                                        (image.anchor_x + image.width + x, image.anchor_y + y))
-                self.space.add(Structure.body, [s.shape for s in structures])
+                    static_segments = self.model.get_static_lines(structure.id)
+                    for seg in static_segments:
+                        structure.add_segment(np.array(seg[2:4]), np.array(seg[4:6]), seg[6], seg[7])
+
+                    static_polygones = self.model.get_static_poly(structure.id, True)
+                    for poly in static_polygones:
+                        structure.add_poly(np.array(poly[2]), poly[3], poly[4])
+
+                    shapes.update(structure.shapes)
+
+                self.space.add(Structure.body, shapes)
 
                 self.viewer_page.update = self.update
                 self.viewer_page.lock_axis(x=True)
@@ -357,7 +362,7 @@ class Controller:
                 if self.player.is_jumping and self.player.on_ground:
                     self.player.is_jumping = False
                     self.player.body.apply_impulse_at_world_point(
-                        (0, 700),
+                        (0, 650),
                         self.player.body.position + self.player.body.center_of_gravity)
 
                 for _ in range(self.spups):

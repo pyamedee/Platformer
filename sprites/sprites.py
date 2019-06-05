@@ -14,20 +14,35 @@ class Structure(Sprite):
     body = pymunk.Body(body_type=pymunk.Body.STATIC)
     body.position = 0, 0
 
-    def __init__(self, image, *args, **kwargs):
+    def __init__(self, id_, image, *args, **kwargs):
         super().__init__(image, *args, **kwargs)
+
+        self.id = id_
 
         self.radius = self.image.width
         self.base_coords = self.x, self.y
 
-        self.to_pygame = self.from_pygame = self.shape = self.a = self.b = None
+        self.a = self.b = None
+        self.shapes = set()
 
-    def init_body(self, a, b, c, d, iswall=False):
-        print(a, b, c, d)
-        self.shape = pymunk.Poly(type(self).body, (a, b, c, d))
-        self.shape.friction = 1
-        self.shape.iswall = iswall
-        self.shape.is_structure = True
+    def add_poly(self, points, thickness, iswall=False):
+        shape = pymunk.Poly(type(self).body, points + self.position, radius=thickness)
+        shape.friction = 1
+        shape.iswall = iswall
+        shape.is_structure = True
+        self.shapes.add(shape)
+
+    def add_segment(self, a, b, thickness, iswall=False):
+        shape = pymunk.Segment(type(self).body, a + self.position, b + self.position, thickness)
+        shape.friction = 1
+        shape.iswall = iswall
+        shape.is_structure = True
+        self.shapes.add(shape)
+
+    def add_to_space(self, space):
+        self.shapes = frozenset(self.shapes)
+        space.add(self.body, self.shapes)
+        return self.shapes
 
     def update(self, a):
         self.x, self.y = self.base_coords + a

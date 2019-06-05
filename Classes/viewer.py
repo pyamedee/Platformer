@@ -80,7 +80,6 @@ class Viewer(BaseViewer):
                                                          font_name=font, batch=self.label_batch,
                                                          font_size=font_size, x=70, y=100, color=(255, 255, 255, 255)),
                                        True]
-
                 play_txt = tuple(self.text_getter((self.language,), 1))[0][-1]
                 self.labels['play'] = [pyglet.text.Label(play_txt,
                                                          font_name=font, batch=self.label_batch,
@@ -93,8 +92,8 @@ class Viewer(BaseViewer):
 
             def is_label_colliding(self, label_name, pos):
                 label = self.labels[label_name][0]
-                x1, x2 = label.x, label.x + 100
-                y1, y2 = label.y, label.y + 50
+                x1, x2 = label.x, label.x + len(label.text) * sp_cfg.getint('font_size') * 0.75
+                y1, y2 = label.y, label.y + sp_cfg.getint('font_size')
                 return (x1 < pos[0] < x2) and (y1 < pos[1] < y2)
 
             def activate_label(self, label_name):
@@ -156,7 +155,7 @@ class Viewer(BaseViewer):
                 for structure in structures:
                     label = structure[4]
                     print(structure)
-                    sprite = sprites.Structure(image,
+                    sprite = sprites.Structure(structure[0], image,
                                                x=structure[2], y=structure[3], batch=self.batch, group=self.ord1)
                     self.sprites.add(sprite)
                     self.structures.add(sprite)
