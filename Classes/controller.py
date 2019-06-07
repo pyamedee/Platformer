@@ -32,12 +32,29 @@ class Controller:
 
     def _play(self):  # callback pour StartingPage
         self.viewer.play()
-        self.page_manager.switch_page('InGame', self.model, self.viewer, 1)
+        self.page_manager.switch_page('InGame', self.model, self.viewer, 1, self._return_to_starting_page)
+
+    def _open_options(self):
+        self.viewer.page_manager.switch_page('Options', self.viewer.bind, self.viewer.unbind)
+        self.page_manager.switch_page('Options', self.model, self.viewer, self._close_options)
+
+    def _close_options(self):
+        self._return_to_starting_page()
+
+    def _return_to_starting_page(self):
+        self.viewer.init_starting_page()
+        self.page_manager.switch_page('StartingPage', self.model, self.viewer, self._play, self._open_options,
+                                      self.clear_cache)
 
     def init_pages(self):
         if self.viewer.page_manager.current_page is None:
-            self.viewer.init_pages()
-        self.page_manager.switch_page('StartingPage', self.model, self.viewer, self._play)
+            self.viewer.init_starting_page()
+        self.page_manager.switch_page('StartingPage', self.model, self.viewer, self._play, self._open_options,
+                                      self.clear_cache)
+
+    def clear_cache(self):
+        self.page_manager.clear_cache()
+        self.viewer.page_manager.clear_cache()
 
     class PageManager(BasePageManager):
 
@@ -54,14 +71,17 @@ class Controller:
 
         class StartingPage(_ControllerPage):
 
-            def __init__(self, model, viewer, play_callback):
+            def __init__(self, model, viewer, play_callback, open_options_callback, clear_cache_callback):
                 super().__init__(model, viewer)
                 self.event_manager = None
                 self.action_manager = None
                 self.play = play_callback
+                self.open_options = open_options_callback
+                self.clear_cache = clear_cache_callback
 
             def activate(self):
-                self.action_manager = self.ActionManager(self.viewer, self.play)
+                self.action_manager = self.ActionManager(self.viewer, self.play, self.open_options,
+                                                         self.clear_cache)
                 self.event_manager = self.EventManager(self.viewer.page_manager.current_page, self.action_manager)
 
                 self.viewer.page_manager.current_page.bind(self.event_manager)
@@ -76,7 +96,8 @@ class Controller:
                     self.viewer_page = viewer_page
                     self.handlers = {
                         'on_mouse_motion': self.mouse_motion,
-                        'on_mouse_press': self.mouse_button_down
+                        'on_mouse_press': self.mouse_button_down,
+                        'on_key_press': self.keydown
                     }
 
                 def get_handlers(self):
@@ -97,14 +118,51 @@ class Controller:
                         if self.viewer_page.is_label_colliding(label, pos):
                             return self.action_manager('do', label)
 
+                def keydown(self, symbol, *_, **__):
+                    if symbol == key.DELETE:
+                        self.action_manager('do', 'clear_cache')
+
             class ActionManager(BaseActionManager):
-                def __init__(self, viewer, play_callback):
+                def __init__(self, viewer, play_callback, open_options_callback, clear_cache_callback):
 
                     self.do_quit = viewer.close
                     self.do_play = play_callback
+                    self.do_opt = open_options_callback
+                    self.do_clear_cache = clear_cache_callback
+
+        class Options(_ControllerPage):
+            def __init__(self, model, viewer, close_options_callback):
+                super().__init__(model, viewer)
+                self.close_options = close_options_callback
+                self.event_manager = None
+                self.action_manager = None
+
+            class EventManager(BaseEventManager):
+                def __init__(self, action_manager):
+                    super().__init__(action_manager)
+
+                    self.handlers = {'on_key_press': self.keydown}
+
+                def keydown(self, symbol, *_, **__):
+                    if symbol == key.P:
+                        self.action_manager('do', 'close_options')
+
+            class ActionManager(BaseActionManager):
+                def __init__(self, close_options_callback):
+                    super().__init__()
+                    self.do_close_options = close_options_callback
+
+            def activate(self):
+                self.action_manager = self.ActionManager(self.close_options)
+                self.event_manager = self.EventManager(self.action_manager)
+
+                self.viewer.page_manager.current_page.bind(self.event_manager)
+
+            def deactivate(self):
+                self.viewer.page_manager.current_page.unbind(self.event_manager)
 
         class InGame(_ControllerPage):
-            def __init__(self, model, viewer, level_id):
+            def __init__(self, model, viewer, level_id, return_to_starting_page_callback):
                 super().__init__(model, viewer)
                 self.level_id = int(level_id)
                 self.structure_getter = self.model.structure_getter(self.level_id)
@@ -126,6 +184,11 @@ class Controller:
                 self.spups = 5  # number of space updates per second
                 self.dt = 1. / self.viewer.fps / self.spups
 
+                self.loaded = False
+
+                self.return_to_starting_page = return_to_starting_page_callback
+                logger.debug('Game was initialised')
+
             @staticmethod
             def init_pymunk_space(gravity):
                 space = pymunk.Space()
@@ -133,23 +196,12 @@ class Controller:
 
                 return space
 
-            def activate(self):
-                logger.debug('play button was pressed')
-                self.viewer_page = self.viewer.page_manager.current_page
-                self.draw_configuration = pymunk.pyglet_util.DrawOptions()
-                # self.viewer_page.display_bg(self.level[3])
+            def load(self):
 
                 self.viewer_page.load_structures(self.structure_getter)
                 self.viewer_page.load_player(self.player_coords)
 
                 self.player = self.viewer_page.player
-
-                logger.debug('Structure and player were loaded')
-
-                self.action_manager = self.ActionManager(self.viewer_page, self.viewer.close)
-                self.event_manager = self.EventManager(self.viewer_page, self.model.get_event, self.action_manager)
-
-                self.viewer_page.bind(self.event_manager)
 
                 self.viewer_page.player.init_body(1.3, 35000)
                 self.player.add_to_space(self.space)
@@ -169,6 +221,23 @@ class Controller:
 
                 self.space.add(Structure.body, shapes)
 
+                self.loaded = True
+                logger.debug('Sprites were loaded')
+
+            def activate(self):
+                self.viewer_page = self.viewer.page_manager.current_page
+                self.draw_configuration = pymunk.pyglet_util.DrawOptions()
+                # self.viewer_page.display_bg(self.level[3])
+
+                if not self.loaded:
+                    self.load()
+
+                self.action_manager = self.ActionManager(self.viewer_page, self.viewer.close,
+                                                         self.return_to_starting_page)
+                self.event_manager = self.EventManager(self.viewer_page, self.model.get_event, self.action_manager)
+
+                self.viewer_page.bind(self.event_manager)
+
                 self.viewer_page.update = self.update
                 self.viewer_page.lock_axis(x=True)
 
@@ -177,7 +246,9 @@ class Controller:
                 self.viewer_page.update_()
 
             def deactivate(self):
-                pass
+                self.viewer_page.unbind(self.event_manager)
+                if self.player.is_moving:
+                    self.action_manager.stop_move()
 
             class EventManager(BaseEventManager):
                 def __init__(self, viewer_page, event_getter, action_manager):
@@ -189,7 +260,8 @@ class Controller:
                         key.SPACE: ('jump', None),
                         key.ESCAPE: ('quit', None),
                         key.P: ('lock', None),
-                        key.M: ('unlock', None)
+                        key.M: ('unlock', None),
+                        key.TAB: ('return_to_starting_page', None)
                     }
                     self.handlers = {'on_key_press': self.keydown,
                                      'on_key_release': self.keyup}
@@ -223,10 +295,13 @@ class Controller:
 
             class ActionManager(BaseActionManager):
 
-                def __init__(self, viewer_page, quit_callback):
+                def __init__(self, viewer_page, quit_callback, return_to_starting_page_callback):
                     self.viewer_page = viewer_page
                     self.player = viewer_page.player
+
                     self.do_quit = quit_callback
+                    self.do_return_to_starting_page = return_to_starting_page_callback
+
                     self.flying_queue = Queue()
                     self.action_queue = Queue()
                     self.stopping_queue = Queue()
@@ -306,7 +381,6 @@ class Controller:
                         return
 
             def move(self, is_mods):
-                print(self.v)
                 modif = truth(is_mods) + 1
                 div = math.sqrt(self.v.x ** 2 + (self.v.y / 2) ** 2) / 6 + 1
                 self.player.body.apply_force_at_local_point(
@@ -368,4 +442,11 @@ class Controller:
                 for _ in range(self.spups):
                     self.space.step(self.dt)
 
-                # self.space.debug_draw(self.draw_configuration)
+            def delete(self):
+                """this function must be call in order to reinitialise the pymunk space"""
+
+                for sprite in self.viewer_page.structures:
+                    self.space.remove(sprite.shapes)
+                self.space.remove(Structure.body)
+                self.space.remove(self.player.shape)
+                self.space.remove(self.player.body)

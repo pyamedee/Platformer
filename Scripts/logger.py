@@ -37,7 +37,7 @@ class PlatformerLogger:
         self.error_handler = lg.FileHandler(self.base_directory + '\\main.error.log', encoding='utf8')
         self.stream_handler = lg.StreamHandler()
 
-        fmtb = lg.Formatter('%(asctime)s | %(levelname)s | line %(lineno)s | %(message)s')
+        fmtb = lg.Formatter('%(asctime)s | %(levelname)s | line %(lineno)s in %(module)s | %(message)s')
         fmterr = lg.Formatter('''{0} %(levelname)s {0}
 at %(asctime)s, line %(lineno)s :
 %(traceback)s'''.format('-' * 30))

@@ -18,7 +18,7 @@ class Viewer(BaseViewer):
         self.page_manager = self.PageManager()
         self.model = model
 
-    def init_pages(self):
+    def init_starting_page(self):
         self.page_manager.switch_page('StartingPage', self.bind, self.unbind, self.model.get_text)
 
     def play(self):
@@ -72,6 +72,8 @@ class Viewer(BaseViewer):
 
                 self.language = general_cfg['language']
 
+                self.init_text()
+
             def init_text(self):
                 font_size = sp_cfg.getint('font_size')
                 font = sp_cfg['font']
@@ -83,8 +85,13 @@ class Viewer(BaseViewer):
                 play_txt = tuple(self.text_getter((self.language,), 1))[0][-1]
                 self.labels['play'] = [pyglet.text.Label(play_txt,
                                                          font_name=font, batch=self.label_batch,
-                                                         font_size=font_size, x=70, y=200, color=(255, 255, 255, 255)),
+                                                         font_size=font_size, x=70, y=300, color=(255, 255, 255, 255)),
                                        True]
+                options_text = tuple(self.text_getter((self.language,), 3))[0][-1]
+                self.labels['opt'] = [pyglet.text.Label(options_text,
+                                                        font_name=font, batch=self.label_batch,
+                                                        font_size=font_size, x=70, y=200, color=(255, 255, 255, 255)),
+                                      True]
 
             def draw(self):
                 super().draw()
@@ -117,11 +124,28 @@ class Viewer(BaseViewer):
                 self.changes.clear()
 
             def activate(self):
-                self.init_text()
+                pass
+                # self.init_text()
 
             def deactivate(self):
-                self.labels.clear()
-                self.changes.clear()
+                for label in self.labels:
+                    self.deactivate_label(label)
+
+        class Options(_MainMenu):
+            def __init__(self, event_binding_callback, event_unbinding_callback):
+                bg_path = 'Images/bg.png'
+                super().__init__(event_binding_callback, event_unbinding_callback, bg_path)
+
+                logger.debug('Options were initialised')
+
+            def activate(self):
+                pass
+
+            def deactivate(self):
+                pass
+
+            def update(self):
+                pass
 
         class InGame(_ViewerPage):
 
@@ -154,7 +178,6 @@ class Viewer(BaseViewer):
                 image = pyglet.image.load('Images/platform.png')
                 for structure in structures:
                     label = structure[4]
-                    print(structure)
                     sprite = sprites.Structure(structure[0], image,
                                                x=structure[2], y=structure[3], batch=self.batch, group=self.ord1)
                     self.sprites.add(sprite)
@@ -163,7 +186,6 @@ class Viewer(BaseViewer):
             def load_player(self, coords):
 
                 image = pyglet.image.load('Images/player.png')
-                print(coords)
                 player = sprites.Player(image, x=coords[0], y=coords[1], batch=self.batch, group=self.ord1)
                 self.sprites.add(player)
                 self.player = player
